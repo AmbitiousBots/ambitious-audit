@@ -1,6 +1,6 @@
 {
   "name": "ambitious-audit",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
@@ -21,9 +21,9 @@
     "verify": "node verify/run"
   },
   "devDependencies": {
-    "@ambitious/depcruise": "file:vendor/ambitious-depcruise-0.1.1.tgz",
-    "@ambitious/kit": "file:vendor/ambitious-kit-0.1.1.tgz",
-    "@ambitious/lint": "file:vendor/ambitious-lint-0.1.1.tgz",
+    "@ambitious/depcruise": "file:vendor/ambitious-depcruise-0.2.1.tgz",
+    "@ambitious/kit": "file:vendor/ambitious-kit-0.2.1.tgz",
+    "@ambitious/lint": "file:vendor/ambitious-lint-0.2.1.tgz",
     "@types/node": "24.19.2",
     "ajv": "8.20.0",
     "dependency-cruiser": "18.7.2",
