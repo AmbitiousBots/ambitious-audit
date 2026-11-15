@@ -70,7 +70,7 @@ Each file in `spec/broken/` is the model with one line changed to a plausible mi
 | `DeriveReportId` in `src/domain/types.ts`, implemented by `deriveReportId` in `src/domain/report.ts`: the report id from the snapshot, the seed and `--now`, never from the attempt | `StoredAtMostOnce` |
 | `ApplyMark` and `MarkAllowedFrom` in `src/domain/types.ts`, implemented by `applyMark` in `src/domain/delivery.ts`: which `report mark` changes are accepted | `NoSendWithoutReview`, `SentOnlyIfStored`, `BoundedAttempts` |
 | `NextDeliveryStep` in `src/domain/types.ts`, implemented by `nextDeliveryStep` in `src/domain/delivery.ts`: what the bot is told to do next | `NoSendWithoutReview`, `BoundedAttempts`, `RetriesConverge` |
-| `buildStoredReport` and `markStoredReport` in `src/db/store.ts`: the writes for one build or one mark, inside the single transaction the command runner opens for that command | all five, for the module's own record |
+| `buildStoredReport` and `markStoredReport` in `src/db/store.ts`: the writes for one build or one mark, inside the single transaction the command runner opens for that command. A rebuild of the same id, while the report is still `built`, may raise `reviewRequired` from false to true and refuses any other change to that flag | all five, for the module's own record |
 | the routine in `skills/snapshot-routine` that calls the service and marks the outcome | all five |
 | the service's handling of `send_report` (in the service's own repository) | `StoredAtMostOnce`: one stored copy per report id |
 

@@ -62,7 +62,7 @@ Shared codes (`E_USAGE`, `E_INPUT_SCHEMA`, `E_FORBIDDEN_PATH`, `E_NO_KEY`, `E_DB
 | `E_NO_BASELINE` | 1 | `diff` was given no `from` and no baseline is stored. | Run `baseline set`, or pass `from`. |
 | `E_REPORT_NOT_FOUND` | 1 | No report has the given id. | Run `report build` and use the `reportId` it returns. |
 | `E_TRANSITION` | 1 | The report cannot move from its current state to the requested one. | Mark it with a state this report can move to. |
-| `E_REVIEW_REQUIRED` | 1 | A report that must be reviewed was marked `sent` or `failed` first. | Mark it `reviewed`, then mark the outcome. |
+| `E_REVIEW_REQUIRED` | 1 | A report that must be reviewed was marked `sent` or `failed` first, or it was rebuilt with a different review requirement. | Mark it `reviewed`, then mark the outcome. While it is still built, a rebuild may ask for a review. |
 | `E_ATTEMPTS_EXHAUSTED` | 1 | The report has already failed the maximum number of times. | Leave it failed. Build a new report when there is something new to send. |
 
 Detail such as the states in a refused transition is in `data`, not in the error object.

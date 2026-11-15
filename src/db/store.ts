@@ -242,7 +242,20 @@ export const buildStoredReport = (
   const nowMs = clock.now().getTime();
   const reportId = deriveReportId(snapshotId, rng, nowMs, digest);
   const existing = readReport(db, reportId);
-  if (existing !== null) return { reportId, payload: payloadOf(existing.payloadJson), next: nextDeliveryStep(existing, DELIVERY_POLICY) };
+  if (existing !== null) {
+    if (existing.reviewRequired === reviewRequired) return { reportId, payload: payloadOf(existing.payloadJson), next: nextDeliveryStep(existing, DELIVERY_POLICY) };
+    if (existing.state === "built" && reviewRequired && !existing.reviewRequired) {
+      db.prepare("UPDATE reports SET review_required = 1 WHERE report_id = ?").run(existing.reportId);
+      const upgraded = { ...existing, reviewRequired: true };
+      return { reportId, payload: payloadOf(existing.payloadJson), next: nextDeliveryStep(upgraded, DELIVERY_POLICY) };
+    }
+    throw failure(
+      "E_REVIEW_REQUIRED",
+      "This report was already built with a different review requirement.",
+      "Use the same reviewRequired, or ask for a review while the report is still built.",
+      { reportId, reviewRequired: existing.reviewRequired },
+    );
+  }
   const hits = evaluateRules(snapshot, RULES);
   const assembled = assembleReport(snapshot, hits, suppressedFingerprints(db, nowMs), reportId, version);
   const payloadJson = canonicalJson(assembled.payload);

@@ -93,13 +93,11 @@ const referenceMs = (snapshot: CollectorInput): number => {
 };
 
 const evidenceFor = (snapshot: CollectorInput, keys: readonly string[]): EvidenceId[] => {
-  const lowered = keys.map((key) => key.toLowerCase());
+  const wanted = new Set(keys.map((key) => key.toLowerCase()));
   const ids: EvidenceId[] = [];
   for (const item of snapshot.evidence) {
-    const source = item.source.toLowerCase();
-    const text = item.text.toLowerCase();
-    const hit = lowered.some((key) => source === key || (key.length >= 3 && (source.includes(key) || text.includes(key))));
-    if (hit && isEvidenceId(item.id) && !ids.includes(item.id)) ids.push(item.id);
+    if (!wanted.has(item.source.toLowerCase())) continue;
+    if (isEvidenceId(item.id) && !ids.includes(item.id)) ids.push(item.id);
   }
   return ids.slice(0, 10);
 };
@@ -147,7 +145,7 @@ const subjectsOf = (rule: RuleDefinition, snapshot: CollectorInput): { readonly 
     return { subjects, evidenceKeys: subjects };
   }
   if (when.kind === "stale-tasks") {
-    return snapshot.tasks.stale7d > when.moreThan ? { subjects: ["tasks"], evidenceKeys: ["tasks", "task"] } : { subjects: [], evidenceKeys: [] };
+    return snapshot.tasks.stale7d > when.moreThan ? { subjects: ["tasks"], evidenceKeys: ["tasks"] } : { subjects: [], evidenceKeys: [] };
   }
   const groups = new Map<string, string[]>();
   for (const routine of snapshot.routines) {

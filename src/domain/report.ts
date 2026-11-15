@@ -76,11 +76,22 @@ const summaryOf = (findings: readonly Finding[], visibility: VisibilityMap): str
 };
 
 const evidenceOf = (snapshot: CollectorInput, findings: readonly Finding[], recommendations: readonly Recommendation[]): readonly ReportEvidence[] => {
-  const wanted = new Set<string>([...findings.flatMap((finding) => finding.evidenceIds), ...recommendations.flatMap((item) => item.evidenceIds)]);
-  const rows: ReportEvidence[] = [];
+  const cited = recommendations.flatMap((item) => item.evidenceIds);
+  const wanted = new Set<string>([...cited, ...findings.flatMap((finding) => finding.evidenceIds)]);
+  const byId = new Map<string, ReportEvidence>();
   for (const item of snapshot.evidence) {
-    if (!wanted.has(item.id) || !isEvidenceId(item.id)) continue;
-    rows.push({ id: item.id, text: item.text });
+    if (!wanted.has(item.id) || !isEvidenceId(item.id) || byId.has(item.id)) continue;
+    byId.set(item.id, { id: item.id, text: item.text });
+  }
+  const rows: ReportEvidence[] = [];
+  for (const id of cited) {
+    const row = byId.get(id);
+    if (row !== undefined && !rows.some((item) => item.id === id)) rows.push(row);
+  }
+  for (const item of snapshot.evidence) {
+    if (!byId.has(item.id) || rows.some((row) => row.id === item.id)) continue;
+    const row = byId.get(item.id);
+    if (row !== undefined) rows.push(row);
   }
   return rows.slice(0, 30);
 };

@@ -79,3 +79,54 @@ test("snapshot, diff, recommend and report build follow the limits", (t) => {
   assert.equal(feedback.exit, 0);
   assert.equal(dataOf(dataOf(feedback.data).payload).schemaVersion, 1);
 });
+
+test("three failed marks then another mark exhausts attempts", (t) => {
+  const home = freshHome(t);
+  const snapshotId = dataOf(run(home, ["snapshot"], owner).data).snapshotId;
+  const built = run(home, ["report", "build"], JSON.stringify({ snapshotId, reviewRequired: false }));
+  assert.equal(built.exit, 0);
+  const reportId = dataOf(built.data).reportId;
+  for (const at of ["2026-11-15T00:00:00Z", "2026-11-15T00:01:00Z", "2026-11-15T00:02:00Z"]) {
+    assert.equal(run(home, ["report", "mark"], JSON.stringify({ reportId, state: "failed", at })).exit, 0);
+  }
+  const exhausted = run(home, ["report", "mark"], JSON.stringify({ reportId, state: "failed", at: "2026-11-15T00:03:00Z" }));
+  assert.equal(exhausted.exit, 1);
+  assert.match(exhausted.stdout, /"code":"E_ATTEMPTS_EXHAUSTED"/);
+});
+
+test("a sent report refuses a following failed mark", (t) => {
+  const home = freshHome(t);
+  const snapshotId = dataOf(run(home, ["snapshot"], owner).data).snapshotId;
+  const built = run(home, ["report", "build"], JSON.stringify({ snapshotId, reviewRequired: false }));
+  assert.equal(built.exit, 0);
+  const reportId = dataOf(built.data).reportId;
+  assert.equal(run(home, ["report", "mark"], JSON.stringify({ reportId, state: "sent", at: "2026-11-15T00:00:00Z" })).exit, 0);
+  const failed = run(home, ["report", "mark"], JSON.stringify({ reportId, state: "failed", at: "2026-11-15T00:01:00Z" }));
+  assert.equal(failed.exit, 1);
+  assert.match(failed.stdout, /"code":"E_TRANSITION"/);
+});
+
+test("rebuilding a built report can ask for a review and refuses any other mismatch", (t) => {
+  const home = freshHome(t);
+  const snapshotId = dataOf(run(home, ["snapshot"], owner).data).snapshotId;
+  const built = run(home, ["report", "build"], JSON.stringify({ snapshotId, reviewRequired: false }));
+  assert.equal(built.exit, 0);
+  const reportId = dataOf(built.data).reportId;
+  const upgraded = run(home, ["report", "build"], JSON.stringify({ snapshotId, reviewRequired: true }));
+  assert.equal(upgraded.exit, 0);
+  assert.equal(dataOf(upgraded.data).reportId, reportId);
+  const next = dataOf(upgraded.data).next;
+  assert.ok(isRecord(next) && next.kind === "waitForReview");
+  const sent = run(home, ["report", "mark"], JSON.stringify({ reportId, state: "sent", at: "2026-11-15T00:00:00Z" }));
+  assert.equal(sent.exit, 1);
+  assert.match(sent.stdout, /"code":"E_REVIEW_REQUIRED"/);
+  const same = run(home, ["report", "build"], JSON.stringify({ snapshotId, reviewRequired: true }));
+  assert.equal(same.exit, 0);
+  const downgrade = run(home, ["report", "build"], JSON.stringify({ snapshotId, reviewRequired: false }));
+  assert.equal(downgrade.exit, 1);
+  assert.match(downgrade.stdout, /"code":"E_REVIEW_REQUIRED"/);
+  assert.equal(run(home, ["report", "mark"], JSON.stringify({ reportId, state: "reviewed", at: "2026-11-15T00:00:00Z" })).exit, 0);
+  const afterReview = run(home, ["report", "build"], JSON.stringify({ snapshotId, reviewRequired: false }));
+  assert.equal(afterReview.exit, 1);
+  assert.match(afterReview.stdout, /"code":"E_REVIEW_REQUIRED"/);
+});

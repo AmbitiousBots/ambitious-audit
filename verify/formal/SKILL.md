@@ -38,7 +38,7 @@ Last confirmed in step with the code at commit `fe460a6c147a2951faedd2d4871d68cd
 | Model part | Code it describes |
 |---|---|
 | `ReportIdFor` | `deriveReportId` in `src/domain/report.ts`, the implementation of `DeriveReportId`: the report id comes from the snapshot, the seed and `--now`, never from the attempt |
-| `Build` | `buildStoredReport` in `src/db/store.ts`; `Report` |
+| `Build` | `buildStoredReport` in `src/db/store.ts`; `Report`. A rebuild of the same id, while the report is still `built`, may raise `reviewRequired` from false to true. Any other change to that flag is refused. The model chooses the flag when the report is first built; raising it later, before a send, still cannot send before review. |
 | `Review`, `SeeAnswer`, `Fail`, `Ack` | `markStoredReport`; `applyMark` in `src/domain/delivery.ts`; `MarkAllowedFrom`, `ReportMark` |
 | `ReadyToSend`, `StartSend`, `Retry` | `nextDeliveryStep` in `src/domain/delivery.ts`, and the routine in `skills/snapshot-routine` |
 | `failures`, `MaxAttempts` | `Report.failures`, incremented when a mark is `failed`, and the `report_events` row written in the same command; `DELIVERY_POLICY.maxAttempts` |
