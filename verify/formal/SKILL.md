@@ -33,15 +33,15 @@ bash spec/check.sh && npm ci && npx tsc --noEmit && npm run check:schemas
 
 ## Covered code
 
-Last confirmed in step with the code at commit `20bc340963802e6ff8157fe98959d96176e26083`. At that commit the delivery code does not exist yet; the model describes the design in `spec/README.md` and the types in `src/domain/types.ts`.
+Last confirmed in step with the code at the commit that added `deriveReportId`, `applyMark` and `nextDeliveryStep`. The model describes the design in `spec/README.md` and the types in `src/domain/types.ts`.
 
 | Model part | Code it describes |
 |---|---|
-| `ReportIdFor` | `DeriveReportId` in `src/domain/types.ts`: the report id comes from the snapshot and the seed, never from the attempt |
-| `Build` | the `report build` command; `Report` |
-| `Review`, `SeeAnswer`, `Fail`, `Ack` | the `report mark` command; `ApplyMark`, `MarkAllowedFrom`, `ReportMark` |
-| `ReadyToSend`, `StartSend`, `Retry` | `NextDeliveryStep`, `DeliveryStep`, `DeliveryPolicy`, and the routine that calls the service |
-| `failures`, `MaxAttempts` | `Report.failures`, counted from the `failed` rows of `report_events`; `DeliveryPolicy.maxAttempts` |
+| `ReportIdFor` | `deriveReportId` in `src/domain/report.ts`: the report id comes from the snapshot, the seed and `--now`, never from the attempt |
+| `Build` | `buildStoredReport` in `src/db/store.ts`; `Report` |
+| `Review`, `SeeAnswer`, `Fail`, `Ack` | `markStoredReport`; `applyMark` in `src/domain/delivery.ts` |
+| `ReadyToSend`, `StartSend`, `Retry` | `nextDeliveryStep`, and the routine in `skills/snapshot-routine` |
+| `failures`, `MaxAttempts` | `Report.failures`, counted when a mark is `failed`; `DELIVERY_POLICY.maxAttempts` |
 | `ServiceStores`, `stored` | the service's handling of `send_report`: one stored copy per report id |
 | `schemas/*.json` | `src/domain/wire.generated.ts` (generated), `SendReportPayload`, `SendFeedbackPayload`, `WIRE_PATTERNS`, `WIRE_LIMITS` |
 

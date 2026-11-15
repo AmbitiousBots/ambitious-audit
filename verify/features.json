@@ -1,0 +1,12 @@
+[
+  {
+    "id": "audit-flow",
+    "userVisible": "A fresh account can be snapshotted, diffed, limited to three evidence-backed recommendations, and turned into a schema-valid report that is reviewed before it is marked sent.",
+    "check": "node verify/audit.mjs"
+  },
+  {
+    "id": "standalone",
+    "userVisible": "Anyone can read and contribute to this repository: nothing in it points at a private plan or at one person's machine.",
+    "check": "node scripts/check-standalone.mjs"
+  }
+]

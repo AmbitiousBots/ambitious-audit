@@ -1,0 +1,25 @@
+{
+  "id": "stale-tasks",
+  "severity": "low",
+  "effort": "small",
+  "rank": 50,
+  "title": "Review tasks with no recent change",
+  "why": "Open tasks that have not changed in 7 days tend to stall. Close them, or say what would move them.",
+  "summary": {
+    "one": "Open tasks have gone 7 days without a change.",
+    "many": "Open tasks have gone 7 days without a change."
+  },
+  "when": { "kind": "stale-tasks", "moreThan": 0 },
+  "fixtures": [
+    {
+      "name": "more stale tasks than the threshold",
+      "expect": "hit",
+      "tasks": { "open": 4, "stale7d": 2, "blocked": 0 }
+    },
+    {
+      "name": "no stale tasks",
+      "expect": "miss",
+      "tasks": { "open": 4, "stale7d": 0, "blocked": 0 }
+    }
+  ]
+}

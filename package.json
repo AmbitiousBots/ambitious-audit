@@ -1,20 +1,37 @@
 {
   "name": "ambitious-audit",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
   "engines": {
-    "node": ">=24"
+    "node": "24.x"
   },
   "scripts": {
+    "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
+    "lint": "eslint . && node scripts/check-standalone.mjs",
+    "depcruise": "depcruise src --output-type err-long",
+    "pretest": "npm run build --silent",
+    "test": "node --test \"test/**/*.test.ts\"",
+    "contract": "ambitious-contract dist/ambitious-audit.mjs",
     "tlc": "bash spec/check.sh",
     "check:schemas": "node scripts/check-schemas.mjs",
-    "generate:wire-types": "node scripts/check-schemas.mjs --write"
+    "generate:wire-types": "node scripts/check-schemas.mjs --write",
+    "verify": "node verify/run"
   },
   "devDependencies": {
+    "@ambitious/depcruise": "file:vendor/ambitious-depcruise-0.1.0.tgz",
+    "@ambitious/kit": "file:vendor/ambitious-kit-0.1.0.tgz",
+    "@ambitious/lint": "file:vendor/ambitious-lint-0.1.0.tgz",
+    "@types/node": "24.19.2",
     "ajv": "8.20.0",
-    "typescript": "5.9.3"
+    "dependency-cruiser": "18.7.2",
+    "esbuild": "0.28.2",
+    "eslint": "10.15.0",
+    "typescript": "6.0.3"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
   }
 }

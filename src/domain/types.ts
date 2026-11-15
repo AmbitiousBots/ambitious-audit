@@ -40,6 +40,9 @@ export const WIRE_LIMITS = {
 } as const;
 
 export const isReportId = (raw: string): raw is ReportId => WIRE_PATTERNS.uuidV7.test(raw);
+export const isSnapshotId = (raw: string): raw is SnapshotId => WIRE_PATTERNS.uuidV7.test(raw);
+export const isBaselineId = (raw: string): raw is BaselineId => WIRE_PATTERNS.uuidV7.test(raw);
+export const isFingerprint = (raw: string): raw is Fingerprint => raw.length > 0 && raw.length <= 500;
 export const isFeedbackId = (raw: string): raw is FeedbackId => WIRE_PATTERNS.uuidV7.test(raw);
 export const isEvidenceId = (raw: string): raw is EvidenceId => WIRE_PATTERNS.evidenceId.test(raw);
 export const isRuleId = (raw: string): raw is RuleId => raw.length <= 64 && WIRE_PATTERNS.ruleId.test(raw);
@@ -92,8 +95,8 @@ export type JsonValue =
 
 export type Change = {
   readonly path: string;
-  readonly before: JsonValue | undefined;
-  readonly after: JsonValue | undefined;
+  readonly before: JsonValue | null;
+  readonly after: JsonValue | null;
 };
 
 export type Finding = {

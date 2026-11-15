@@ -1,0 +1,25 @@
+{
+  "id": "connector-needs-auth",
+  "severity": "high",
+  "effort": "small",
+  "rank": 20,
+  "title": "Sign the connector in again",
+  "why": "A connector that needs to be signed in again cannot be used. Sign it in, or remove the routines that depend on it.",
+  "summary": {
+    "one": "1 connector needs to be signed in again.",
+    "many": "{count} connectors need to be signed in again."
+  },
+  "when": { "kind": "connector-status", "status": "needsAuth" },
+  "fixtures": [
+    {
+      "name": "a connector that needs a sign-in",
+      "expect": "hit",
+      "connectors": [{ "name": "calendar", "status": "needsAuth" }]
+    },
+    {
+      "name": "a connector that is working",
+      "expect": "miss",
+      "connectors": [{ "name": "calendar", "status": "ok" }]
+    }
+  ]
+}

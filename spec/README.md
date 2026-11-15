@@ -65,14 +65,13 @@ Each file in `spec/broken/` is the model with one line changed to a plausible mi
 
 ## Which code this constrains
 
-The delivery code does not exist yet. When it is written:
-
 | Code | Constrained by |
 |---|---|
-| `DeriveReportId` in `src/domain/types.ts`: the report id from snapshot and seed | `StoredAtMostOnce` |
-| `ApplyMark`: which `report mark` changes are accepted, and `MarkAllowedFrom` | `NoSendWithoutReview`, `SentOnlyIfStored`, `BoundedAttempts` |
-| `NextDeliveryStep`: what the bot is told to do next with a report | `NoSendWithoutReview`, `BoundedAttempts`, `RetriesConverge` |
-| the routine that calls the service and marks the outcome | all five |
+| `deriveReportId` in `src/domain/report.ts`: the report id from the snapshot, the seed and `--now`, never from the attempt | `StoredAtMostOnce` |
+| `applyMark` in `src/domain/delivery.ts`: which `report mark` changes are accepted | `NoSendWithoutReview`, `SentOnlyIfStored`, `BoundedAttempts` |
+| `nextDeliveryStep` in `src/domain/delivery.ts`: what the bot is told to do next | `NoSendWithoutReview`, `BoundedAttempts`, `RetriesConverge` |
+| `buildStoredReport` and `markStoredReport` in `src/db/store.ts`: one transaction per build or mark | all five, for the module's own record |
+| the routine in `skills/snapshot-routine` that calls the service and marks the outcome | all five |
 | the service's handling of `send_report` (in the service's own repository) | `StoredAtMostOnce`: one stored copy per report id |
 
 The module has no network access, so it cannot stop a bot from calling the service. It enforces the rules through what it accepts and what it answers: `NextDeliveryStep` says `waitForReview` until a required review is marked, and `ApplyMark` refuses `sent` or `failed` for a report whose required review is missing, and refuses another attempt after `maxAttempts` failures.
