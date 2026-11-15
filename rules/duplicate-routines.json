@@ -1,0 +1,31 @@
+{
+  "id": "duplicate-routines",
+  "severity": "low",
+  "effort": "medium",
+  "rank": 60,
+  "title": "Remove the duplicate routine",
+  "why": "Two routines with the same schedule on the same bot do the same work twice. Keep one.",
+  "summary": {
+    "one": "1 routine repeats a schedule already used on its bot.",
+    "many": "{count} routines repeat a schedule already used on their bot."
+  },
+  "when": { "kind": "duplicate-routines" },
+  "fixtures": [
+    {
+      "name": "two routines share a bot and a schedule",
+      "expect": "hit",
+      "routines": [
+        { "id": "routine-1", "botId": "bot-1", "schedule": "every day at 08:00", "state": "active", "lastRunAt": "2026-11-14T08:00:00Z" },
+        { "id": "routine-2", "botId": "bot-1", "schedule": "every day at 08:00", "state": "active", "lastRunAt": "2026-11-14T08:00:00Z" }
+      ]
+    },
+    {
+      "name": "two routines on one bot with different schedules",
+      "expect": "miss",
+      "routines": [
+        { "id": "routine-1", "botId": "bot-1", "schedule": "every day at 08:00", "state": "active", "lastRunAt": "2026-11-14T08:00:00Z" },
+        { "id": "routine-2", "botId": "bot-1", "schedule": "every Monday at 09:00", "state": "active", "lastRunAt": "2026-11-14T09:00:00Z" }
+      ]
+    }
+  ]
+}

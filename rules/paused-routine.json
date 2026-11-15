@@ -1,0 +1,29 @@
+{
+  "id": "paused-routine",
+  "severity": "medium",
+  "effort": "small",
+  "rank": 30,
+  "title": "Resume or remove the paused routine",
+  "why": "A routine paused for more than 7 days does no work. Resume it or remove it so the account matches what you expect.",
+  "summary": {
+    "one": "1 routine has been paused for more than 7 days.",
+    "many": "{count} routines have been paused for more than 7 days."
+  },
+  "when": { "kind": "routine-state", "state": "paused", "olderThanDays": 7 },
+  "fixtures": [
+    {
+      "name": "a routine paused for longer than 7 days",
+      "expect": "hit",
+      "routines": [
+        { "id": "routine-1", "botId": "bot-1", "schedule": "every day at 08:00", "state": "paused", "lastRunAt": "2026-11-01T00:00:00Z" }
+      ]
+    },
+    {
+      "name": "a routine paused for less than 7 days",
+      "expect": "miss",
+      "routines": [
+        { "id": "routine-1", "botId": "bot-1", "schedule": "every day at 08:00", "state": "paused", "lastRunAt": "2026-11-14T00:00:00Z" }
+      ]
+    }
+  ]
+}

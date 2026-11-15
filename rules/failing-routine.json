@@ -1,0 +1,29 @@
+{
+  "id": "failing-routine",
+  "severity": "high",
+  "effort": "small",
+  "rank": 10,
+  "title": "Fix the failing routine",
+  "why": "A failing routine is not doing its job. Read the short error it recorded, fix the cause, or pause it on purpose.",
+  "summary": {
+    "one": "1 routine is failing.",
+    "many": "{count} routines are failing."
+  },
+  "when": { "kind": "routine-state", "state": "failing" },
+  "fixtures": [
+    {
+      "name": "a routine whose state is failing",
+      "expect": "hit",
+      "routines": [
+        { "id": "routine-1", "botId": "bot-1", "schedule": "every day at 08:00", "state": "failing", "lastRunAt": "2026-11-14T08:00:00Z" }
+      ]
+    },
+    {
+      "name": "a routine whose state is active",
+      "expect": "miss",
+      "routines": [
+        { "id": "routine-1", "botId": "bot-1", "schedule": "every day at 08:00", "state": "active", "lastRunAt": "2026-11-14T08:00:00Z" }
+      ]
+    }
+  ]
+}
