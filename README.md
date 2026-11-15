@@ -2,7 +2,7 @@
 
 The audit module turns what a bot can see in an account into a snapshot, diffs it against a stored baseline, applies rule-based findings and returns at most three recommendations, each citing its evidence, plus a map of what the bot could not see. A value the bot could not observe is recorded as unknown, never as zero, and no finding is made from it. It is a command-line tool with JSON in and JSON out, one SQLite file and no user interface. The bot shows results in its own pages. A report leaves the computer only when the customer has approved the tool that sends it.
 
-The module follows the shared module contract in [ambitious-kit](https://github.com/AmbitiousBots/ambitious-kit/blob/kit-v0.2.1/MODULE_CONTRACT.md): one binary, a JSON envelope on stdout, one SQLite file, deterministic with `--now` and `--seed`, and no network. Version 0.2.0 uses kit 0.2.1, kept under `vendor/` so a build does not download it.
+The module follows the shared module contract in [ambitious-kit](https://github.com/AmbitiousBots/ambitious-kit/blob/kit-v0.2.1/MODULE_CONTRACT.md): one binary, a JSON envelope on stdout, one SQLite file, deterministic with `--now` and `--seed`, and no network. Version 0.2.1 uses kit 0.2.1, kept under `vendor/` so a build does not download it.
 
 Part of [Ambitious](https://ambitiousbots.com). Licensed under the Apache License, Version 2.0; see [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
@@ -63,24 +63,27 @@ The visibility map has exactly one entry for each of nine signals: `transcripts`
 With `unknown` the audit still runs, in partial mode (`mode: "partial"` in the output of `findings` and `recommend`):
 
 - Rules still fire on what was observed.
-- A finding from a rule whose advice depends on what the reader is allowed to change carries `withheld: "roleUnknown"`, and its recommendation is not returned. `recommend` lists those rule ids in `withheld`.
+- A finding from a rule that depends on the role carries `withheld: "roleUnknown"`, and its recommendation is not returned. `recommend` lists those rule ids in `withheld`. A bot that does not know its role may be seeing only part of the account, and it cannot tell what the reader is allowed to change, so advice about routines and bots is held back.
+- Advice about this bot's own connectors is still given. The `connectors` list is the bot's own connector list, so what it shows does not depend on how much of the account the bot can see. Two rules have this property: `connector-needs-auth` and `connector-needs-grant`. Their findings carry no `withheld` mark, and their recommendations are returned in any mode.
+- `stale-tasks` is also given in any mode, because the task counts come from the bot's own task list.
+- Every other rule is withheld. Whatever the mode, a recommendation still needs at least one evidence line, and a report still holds at most 3.
 - The report has `accountKind: "unknown"`, and its summary says the role is unknown and how many recommendations were withheld.
 
 ## Rules
 
 Rules live in `rules/*.json`. Each one has a positive fixture and a negative fixture.
 
-| Rule | Fires when | Depends on the role |
+| Rule | Fires when | Withheld when the role is unknown |
 |---|---|---|
 | `failing-routine` | A routine's state is `failing`. | yes |
-| `connector-needs-auth` | A connector's status is `needsAuth`. | yes |
-| `connector-needs-grant` | A connector's status is `needsGrant`: it is connected, but this bot has no access to it. | yes |
+| `connector-needs-auth` | A connector's status is `needsAuth`. | no |
+| `connector-needs-grant` | A connector's status is `needsGrant`: it is connected, but this bot has no access to it. | no |
 | `paused-routine` | A routine is paused, and its last run is `"never"` or more than 7 days before the snapshot. | yes |
 | `bot-unused` | A bot's last activity is `"never"` or more than 14 days before the snapshot. | yes |
 | `stale-tasks` | The count of tasks with no change in 7 days is greater than the threshold in the rule file. | no |
 | `duplicate-routines` | Two routines on the same bot share a schedule. | yes |
 
-A rule never fires on a value that is `null`. A paused routine whose last run was not observed, a bot whose last activity was not observed, and task counts that were not observed produce no rule finding. Connector statuses `ok`, `initializing` and `error` produce no finding. `dependsOnRole` in a rule file says whether its recommendation is withheld when the role is unknown.
+A rule never fires on a value that is `null`. A paused routine whose last run was not observed, a bot whose last activity was not observed, and task counts that were not observed produce no rule finding. Connector statuses `ok`, `initializing` and `error` produce no finding. `dependsOnRole` in a rule file says whether its recommendation is withheld when the role is unknown. A rule that fires on a connector status cites only evidence whose `source` is the name of one of this bot's connectors, so it must have `dependsOnRole: false`. Those rules are listed by id in `OWN_CONNECTOR_RULE_IDS` in `src/domain/rule-pack.ts`, and the module refuses to start when that list, the rule files and the `dependsOnRole` values disagree.
 
 Ages are measured from the snapshot's `collectedAt`, not from the clock. A recommendation is kept only when it cites at least one evidence id present in the snapshot. A recommendation whose fingerprint was marked `sent` is dropped for the number of days in `rules/settings.json` (21 by default).
 
@@ -117,6 +120,12 @@ This module adds:
 | `E_ATTEMPTS_EXHAUSTED` | 1 | The report has already failed the maximum number of times. | Leave it failed. Build a new report when there is something new to send. |
 
 Detail such as the states in a refused transition is in `data`, not in the error object.
+
+## Moving from 0.2.0
+
+- When the role is unknown, `connector-needs-auth` and `connector-needs-grant` are no longer withheld: `recommend` and `report build` return their recommendations, their findings carry no `withheld` mark, and `recommend` no longer lists them in `withheld`. Before, a bot that did not know its role found connectors that needed a sign-in and gave no advice about them. Nothing changes when the role is known.
+- A connector recommendation needs an evidence line whose `source` is the connector's name, as every recommendation does. A collector that wrote no such line still gets the finding and no recommendation.
+- No schema changes shape. A collector document accepted by 0.2.0 is accepted by 0.2.1, stored snapshots and reports are read as they are, and the report payload is still version 2. One description in the collector schema now mentions the connector advice.
 
 ## Moving from 0.1.0
 
