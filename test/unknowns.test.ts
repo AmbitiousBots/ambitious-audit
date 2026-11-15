@@ -6,7 +6,7 @@ import { Failure } from "@ambitious/kit/domain/failure";
 import { isRecord } from "@ambitious/kit/domain/json";
 import { parseCollector } from "../src/domain/input.ts";
 import { findingsFrom, recommendationsFrom } from "../src/domain/report.ts";
-import { RULES } from "../src/domain/rule-pack.ts";
+import { OWN_CONNECTOR_RULE_IDS, RULES } from "../src/domain/rule-pack.ts";
 import { evaluateRules } from "../src/domain/rules.ts";
 import type { VisibilitySignal } from "../src/domain/types.ts";
 
@@ -65,6 +65,8 @@ const GROUPS: readonly Group[] = [
   },
 ];
 
+const GIVEN_IN_ANY_MODE = [...OWN_CONNECTOR_RULE_IDS, "stale-tasks"];
+
 const ALWAYS = ["failing-routine", "connector-needs-auth", "connector-needs-grant", "duplicate-routines"];
 
 const documentWith = (hidden: readonly Group[], admitted: readonly Group[]): Record<string, unknown> => {
@@ -92,11 +94,34 @@ test("for every combination of unobserved groups, rules fire only on observed va
     assert.equal(findings.filter((finding) => finding.kind === "visibility").length, hidden.length, label);
     const roleUnknown = hidden.some((group) => group.signal === "accountRole");
     for (const finding of findings.filter((item) => item.kind === "rule")) {
-      assert.equal(finding.withheld, roleUnknown && finding.ruleId !== "stale-tasks" ? "roleUnknown" : undefined, `${label}: ${finding.ruleId}`);
+      assert.equal(finding.withheld, roleUnknown && !GIVEN_IN_ANY_MODE.includes(String(finding.ruleId)) ? "roleUnknown" : undefined, `${label}: ${finding.ruleId}`);
     }
     const recommended = recommendationsFrom(hits, new Set()).map((item) => String(item.recommendation.id));
     assert.ok(recommended.length <= 3, label);
-    if (roleUnknown) assert.deepEqual(recommended, blind.has("stale-tasks") ? [] : ["stale-tasks"], label);
+    if (roleUnknown) assert.deepEqual(recommended, GIVEN_IN_ANY_MODE.filter((rule) => !blind.has(rule)), label);
+  }
+});
+
+test("the rules given when the role is unknown are the two connector rules and stale-tasks, and a connector rule cites only evidence about a listed connector", () => {
+  assert.deepEqual(OWN_CONNECTOR_RULE_IDS, ["connector-needs-auth", "connector-needs-grant"]);
+  assert.deepEqual(RULES.filter((rule) => !rule.dependsOnRole).map((rule) => String(rule.id)).sort(), [...GIVEN_IN_ANY_MODE].sort());
+  const roleGroup = GROUPS.filter((group) => group.signal === "accountRole");
+  const document = documentWith(roleGroup, roleGroup);
+  document.evidence = [
+    ...(Array.isArray(document.evidence) ? document.evidence : []),
+    { id: "ev-7", kind: "excerpt", text: "A second line about the calendar connector.", source: "Calendar" },
+    { id: "ev-8", kind: "excerpt", text: "A line that only mentions the calendar connector.", source: "calendar tool" },
+  ];
+  const snapshot = parseCollector(document);
+  const connectorNames = new Set(snapshot.connectors.map((connector) => connector.name.toLowerCase()));
+  const sourceOf = new Map(snapshot.evidence.map((item) => [String(item.id), item.source.toLowerCase()]));
+  const connectorHits = evaluateRules(snapshot, RULES).filter((hit) => OWN_CONNECTOR_RULE_IDS.includes(hit.rule.id));
+  assert.deepEqual(connectorHits.map((hit) => [String(hit.rule.id), hit.withheld, hit.evidenceIds.map(String)]), [
+    ["connector-needs-auth", false, ["ev-4", "ev-7"]],
+    ["connector-needs-grant", false, ["ev-5"]],
+  ]);
+  for (const hit of connectorHits) {
+    for (const id of hit.evidenceIds) assert.equal(connectorNames.has(sourceOf.get(id) ?? ""), true, id);
   }
 });
 
