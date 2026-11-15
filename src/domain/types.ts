@@ -2,9 +2,9 @@ import type {
   CollectorV1,
   CollectorV1VisibilityEntry,
   SendFeedbackV1,
-  SendReportV1,
-  SendReportV1Finding,
-  SendReportV1Recommendation,
+  SendReportV2,
+  SendReportV2Finding,
+  SendReportV2Recommendation,
 } from "./wire.generated.js";
 
 declare const brand: unique symbol;
@@ -64,10 +64,17 @@ export type CollectorInput = CollectorV1;
 
 export type VisibilitySignal = CollectorV1VisibilityEntry["signal"];
 export type VisibilityEntry = CollectorV1VisibilityEntry;
-export type VisibilityMap = readonly [VisibilityEntry, VisibilityEntry, VisibilityEntry, VisibilityEntry];
+export type VisibilityMap = readonly VisibilityEntry[];
 
-export type Severity = SendReportV1Finding["severity"];
-export type Effort = SendReportV1Recommendation["effort"];
+export const VISIBILITY_SIGNALS = ["transcripts", "usage", "otherBots", "auditLog", "accountRole", "tasks", "pages", "botActivity", "routines"] as const satisfies readonly VisibilitySignal[];
+
+export type AccountKind = CollectorV1["account"]["kind"];
+export type AuditMode = "full" | "partial";
+
+export const auditModeOf = (snapshot: CollectorInput): AuditMode => (snapshot.account.kind === "unknown" ? "partial" : "full");
+
+export type Severity = SendReportV2Finding["severity"];
+export type Effort = SendReportV2Recommendation["effort"];
 export type FeedbackSender = SendFeedbackV1["from"];
 
 export type EvidenceIds = readonly EvidenceId[];
@@ -100,10 +107,12 @@ export type Change = {
 };
 
 export type Finding = {
+  readonly kind: SendReportV2Finding["kind"];
   readonly ruleId: RuleId;
   readonly severity: Severity;
   readonly evidenceIds: EvidenceIds;
   readonly summary: string;
+  readonly withheld?: "roleUnknown";
 };
 
 export type Recommendation = {
@@ -134,14 +143,16 @@ export type Suppression = {
 export type ReportEvidence = {
   readonly id: EvidenceId;
   readonly text: string;
+  readonly source?: string;
 };
 
 export type SendReportPayload = {
-  readonly schemaVersion: 1;
+  readonly schemaVersion: 2;
   readonly reportId: ReportId;
   readonly period: { readonly from: Timestamp; readonly to: Timestamp };
+  readonly accountKind: AccountKind;
   readonly summary: string;
-  readonly counts: SendReportV1["counts"];
+  readonly counts: SendReportV2["counts"];
   readonly findings: readonly Finding[];
   readonly recommendations: Recommendations;
   readonly evidence: readonly ReportEvidence[];
@@ -157,7 +168,7 @@ export type SendFeedbackPayload = {
   readonly text: string;
 };
 
-export const sendReportWire = (payload: SendReportPayload): SendReportV1 => payload;
+export const sendReportWire = (payload: SendReportPayload): SendReportV2 => payload;
 
 export const sendFeedbackWire = (payload: SendFeedbackPayload): SendFeedbackV1 => payload;
 
@@ -230,11 +241,12 @@ export type BaselineSetOutput = { readonly baselineId: BaselineId };
 export type DiffInput = { readonly from?: BaselineId; readonly to: SnapshotId };
 export type DiffOutput = { readonly changes: readonly Change[] };
 export type FindingsInput = { readonly snapshotId: SnapshotId };
-export type FindingsOutput = { readonly findings: readonly Finding[] };
+export type FindingsOutput = { readonly mode: AuditMode; readonly findings: readonly Finding[] };
 export type RecommendInput = { readonly snapshotId: SnapshotId };
-export type RecommendOutput = { readonly recommendations: Recommendations };
+export type RecommendOutput = { readonly mode: AuditMode; readonly recommendations: Recommendations; readonly withheld: readonly RuleId[] };
 export type ReportBuildInput = { readonly snapshotId: SnapshotId; readonly reviewRequired: boolean };
 export type ReportBuildOutput = { readonly reportId: ReportId; readonly payload: SendReportPayload };
 export type ReportMarkOutput = { readonly report: Report };
+export type ReportMarkInput = { readonly reportId: ReportId; readonly state: MarkableState; readonly at: Timestamp };
 export type FeedbackBuildInput = { readonly reportId?: ReportId; readonly text: string; readonly from: FeedbackSender };
 export type FeedbackBuildOutput = { readonly payload: SendFeedbackPayload };

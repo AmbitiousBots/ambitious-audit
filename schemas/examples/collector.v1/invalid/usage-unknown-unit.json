@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 1,
+  "collectedAt": "2026-11-15T00:00:00Z",
+  "account": {
+    "kind": "owner",
+    "label": "Main workspace"
+  },
+  "bots": [
+    {
+      "id": "bot-1",
+      "name": "Scheduling bot",
+      "lastActiveAt": "2026-11-14T18:30:00Z",
+      "routineCount": 2,
+      "usage": {
+        "unit": "tokens",
+        "amount7d": 412.5
+      }
+    },
+    {
+      "id": "bot-2",
+      "name": "Reporting bot",
+      "lastActiveAt": "never",
+      "routineCount": 0,
+      "usage": {
+        "unit": "credits",
+        "amount7d": 0
+      }
+    }
+  ],
+  "routines": [
+    {
+      "id": "routine-1",
+      "botId": "bot-1",
+      "schedule": "every weekday at 08:00",
+      "state": "active",
+      "lastRunAt": "2026-11-14T08:00:00Z",
+      "usage": {
+        "unit": "credits",
+        "amount7d": 300
+      }
+    },
+    {
+      "id": "routine-2",
+      "botId": "bot-1",
+      "schedule": "every Monday at 09:00",
+      "state": "failing",
+      "lastRunAt": "2026-11-09T09:00:00Z",
+      "usage": {
+        "unit": "credits",
+        "amount7d": 112.5
+      },
+      "lastError": "The calendar connector needs to be signed in again."
+    }
+  ],
+  "connectors": [
+    {
+      "name": "calendar",
+      "status": "needsAuth"
+    },
+    {
+      "name": "documents",
+      "status": "ok"
+    }
+  ],
+  "tasks": {
+    "open": 14,
+    "stale7d": 3,
+    "blocked": 1
+  },
+  "pages": {
+    "count": 22,
+    "updated7d": 5
+  },
+  "visibility": [
+    {
+      "signal": "transcripts",
+      "seen": false,
+      "why": "The bot has no tool that reads other bots' conversations."
+    },
+    {
+      "signal": "usage",
+      "seen": true,
+      "why": "Read from the account's usage view."
+    },
+    {
+      "signal": "otherBots",
+      "seen": true,
+      "why": "Listed with the account's bot list tool."
+    },
+    {
+      "signal": "auditLog",
+      "seen": false,
+      "why": "The account does not give this bot access to the audit log."
+    },
+    {
+      "signal": "accountRole",
+      "seen": true,
+      "why": "The account's member view shows this bot's role."
+    },
+    {
+      "signal": "tasks",
+      "seen": true,
+      "why": "Read from the task module's output."
+    },
+    {
+      "signal": "pages",
+      "seen": true,
+      "why": "Counted with the page list tool."
+    },
+    {
+      "signal": "botActivity",
+      "seen": true,
+      "why": "Shown in the account's bot list."
+    },
+    {
+      "signal": "routines",
+      "seen": true,
+      "why": "Listed with the routine list tool."
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev-1",
+      "kind": "excerpt",
+      "text": "The calendar connector needs to be signed in again.",
+      "source": "routine-2"
+    },
+    {
+      "id": "ev-2",
+      "kind": "count",
+      "text": "3 open tasks have not changed in 7 days.",
+      "source": "task list tool"
+    }
+  ]
+}

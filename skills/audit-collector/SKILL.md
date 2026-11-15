@@ -7,10 +7,30 @@ description: "Gather a collector document for ambitious-audit from the account t
 
 Build the JSON document that `ambitious-audit snapshot` stores. Use only the bot's own tools. Do not read another program's private files, and do not put a conversation transcript in any field. Every text field is short: evidence text is at most 280 characters.
 
-Include `schemaVersion` 1, `collectedAt` as UTC, the account kind (`owner`, `guest` or `team`) and a short label, then the bots, routines, connectors, task counts and page counts that the tools actually returned.
+When unsure about a field, run `ambitious-audit schema`. It prints the full schema with a description of every field. If `snapshot` refuses the document, each error names the field as a JSON pointer and the rule it broke; fix those fields and run it again.
 
-`visibility` must contain exactly one entry for each of `transcripts`, `usage`, `otherBots` and `auditLog`. Set `seen` from what the tool call did, and `why` in one sentence. If a tool was missing or refused, `seen` is false and `why` says so. Do not leave a signal out.
+## Write what was observed, and null for the rest
 
-`evidence` entries use ids `ev-1`, `ev-2`, and so on. Point `source` at the bot id, routine id, connector name or tool the line came from, so a later finding can cite it.
+Include `schemaVersion` 1, `collectedAt` as UTC, the account, then the bots, routines, connectors, task counts and page counts that the tools actually returned.
+
+A value no tool returned is `null`. Never write 0 for it, and never estimate.
+
+- `account.kind` is `owner`, `guest` or `team` only when a tool reported the role or the account holder stated it. Otherwise write `unknown`. Do not work the role out from what the bot can or cannot do. The audit still runs with `unknown`.
+- `tasks.open`, `tasks.stale7d` and `tasks.blocked` come from the output of the ambitious-tasks module. If it is not installed or was not run, all three are `null`.
+- `pages.count` and `pages.updated7d` are `null` when the page tool did not return them.
+- `lastActiveAt` on a bot and `lastRunAt` on a routine are a UTC time, the word `never` when the account shows it has not happened yet, or `null` when the account does not show it.
+- `routineCount` on a bot is `null` when it was not shown.
+- `usage` on each bot and each routine is `{ "unit": "credits", "amount7d": 412.5 }` when the account reports credits, `{ "unit": "percent", "amount7d": 82.5 }` when it reports a share of the total, or `null` when it reports neither for that bot or routine.
+- A connector's `status` is `ok`, `needsAuth`, `needsGrant`, `initializing` or `error`, as the account shows it.
+
+## Visibility
+
+`visibility` must contain exactly one entry for each of `transcripts`, `usage`, `otherBots`, `auditLog`, `accountRole`, `tasks`, `pages`, `botActivity` and `routines`. Set `seen` from what the tool call did, and `why` in one sentence. If a tool was missing or refused, `seen` is false and `why` says so. Do not leave a signal out.
+
+Every `null` needs its signal set to `seen: false`: `accountRole` for an unknown role, `tasks` and `pages` for their counts, `botActivity` for `lastActiveAt`, `routines` for `routineCount` and `lastRunAt`, and `usage` for usage. `usage` is seen only when usage was read for every listed bot and every listed routine.
+
+## Evidence
+
+`evidence` entries use ids `ev-1`, `ev-2`, and so on. Point `source` at the bot id, routine id or connector name the line is about, or `tasks` for task counts, so a finding about that thing can cite it. A recommendation is only made when its finding has evidence.
 
 Write the document to a file outside the bot's private data directory and pass it with `--in`.

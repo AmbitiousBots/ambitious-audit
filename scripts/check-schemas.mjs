@@ -12,6 +12,7 @@ const generatedFile = join(repoRoot, "src", "domain", "wire.generated.ts");
 const SCHEMAS = [
   { file: "collector.v1.json", typeName: "CollectorV1", sentToService: false },
   { file: "send_report.v1.json", typeName: "SendReportV1", sentToService: true, maxTextCharacters: 24000 },
+  { file: "send_report.v2.json", typeName: "SendReportV2", sentToService: true, maxTextCharacters: 29000 },
   { file: "send_feedback.v1.json", typeName: "SendFeedbackV1", sentToService: true, maxTextCharacters: 4100 },
 ];
 
@@ -194,7 +195,7 @@ const checkExamples = (validate, schemaFile, expected) => {
 const domainAgreement = async (loaded) => {
   const { WIRE_PATTERNS, WIRE_LIMITS } = await import(join(repoRoot, "src", "domain", "types.ts"));
   const schema = Object.fromEntries(loaded.map((entry) => [entry.typeName, entry.schema]));
-  const report = schema.SendReportV1;
+  const report = schema.SendReportV2;
   const pairs = [
     ["WIRE_PATTERNS.uuidV7", WIRE_PATTERNS.uuidV7.source, report.$defs.uuidV7.pattern],
     ["WIRE_PATTERNS.uuidV7", WIRE_PATTERNS.uuidV7.source, schema.SendFeedbackV1.$defs.uuidV7.pattern],
@@ -225,6 +226,9 @@ const REQUIRED_LIMITS = [
   ["collector.v1.json evidence text", (s) => s.CollectorV1.$defs.evidence.properties.text.maxLength, 280],
   ["send_feedback.v1.json text", (s) => s.SendFeedbackV1.properties.text.maxLength, 4000],
   ["send_report.v1.json recommendations", (s) => s.SendReportV1.properties.recommendations.maxItems, 3],
+  ["send_report.v2.json summary", (s) => s.SendReportV2.properties.summary.maxLength, 1200],
+  ["send_report.v2.json evidence text", (s) => s.SendReportV2.$defs.evidence.properties.text.maxLength, 280],
+  ["send_report.v2.json recommendations", (s) => s.SendReportV2.properties.recommendations.maxItems, 3],
 ];
 
 const run = async (argv) => {
@@ -261,6 +265,14 @@ const run = async (argv) => {
     const byType = Object.fromEntries(loaded.map((entry) => [entry.typeName, entry.schema]));
     for (const [name, read, most] of REQUIRED_LIMITS) {
       if (read(byType) > most) problems.push(`${name} allows ${read(byType)}, more than the published limit of ${most}`);
+    }
+    const { COMMAND_INPUT_SCHEMAS } = await import(join(repoRoot, "src", "domain", "command-inputs.ts"));
+    const inputProblems = Object.entries(COMMAND_INPUT_SCHEMAS).flatMap(([command, schema]) =>
+      lintNode(schema, schema, "").map((problem) => `input of "${command}"${problem}`),
+    );
+    problems.push(...inputProblems);
+    if (inputProblems.length === 0) {
+      process.stdout.write(`command inputs: ${Object.keys(COMMAND_INPUT_SCHEMAS).length} schemas reject unknown properties and bound every string and list\n`);
     }
     const agreement = await domainAgreement(loaded);
     problems.push(...agreement.problems);

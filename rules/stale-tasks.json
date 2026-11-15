@@ -3,6 +3,7 @@
   "severity": "low",
   "effort": "small",
   "rank": 50,
+  "dependsOnRole": false,
   "title": "Review tasks with no recent change",
   "why": "Open tasks that have not changed in 7 days tend to stall. Close them, or say what would move them.",
   "summary": {
@@ -20,6 +21,16 @@
       "name": "no stale tasks",
       "expect": "miss",
       "tasks": { "open": 4, "stale7d": 0, "blocked": 0 }
+    },
+    {
+      "name": "task counts that were not observed",
+      "expect": "miss",
+      "tasks": { "open": null, "stale7d": null, "blocked": null }
+    },
+    {
+      "name": "open tasks observed but stale tasks not",
+      "expect": "miss",
+      "tasks": { "open": 4, "stale7d": null, "blocked": null }
     }
   ]
 }

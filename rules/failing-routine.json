@@ -3,6 +3,7 @@
   "severity": "high",
   "effort": "small",
   "rank": 10,
+  "dependsOnRole": true,
   "title": "Fix the failing routine",
   "why": "A failing routine is not doing its job. Read the short error it recorded, fix the cause, or pause it on purpose.",
   "summary": {
@@ -15,14 +16,14 @@
       "name": "a routine whose state is failing",
       "expect": "hit",
       "routines": [
-        { "id": "routine-1", "botId": "bot-1", "schedule": "every day at 08:00", "state": "failing", "lastRunAt": "2026-11-14T08:00:00Z" }
+        { "id": "routine-1", "botId": "bot-1", "schedule": "every day at 08:00", "state": "failing", "lastRunAt": "2026-11-14T08:00:00Z", "usage": null }
       ]
     },
     {
       "name": "a routine whose state is active",
       "expect": "miss",
       "routines": [
-        { "id": "routine-1", "botId": "bot-1", "schedule": "every day at 08:00", "state": "active", "lastRunAt": "2026-11-14T08:00:00Z" }
+        { "id": "routine-1", "botId": "bot-1", "schedule": "every day at 08:00", "state": "active", "lastRunAt": "2026-11-14T08:00:00Z", "usage": null }
       ]
     }
   ]

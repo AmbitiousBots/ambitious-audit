@@ -3,6 +3,7 @@
   "severity": "medium",
   "effort": "small",
   "rank": 30,
+  "dependsOnRole": true,
   "title": "Resume or remove the paused routine",
   "why": "A routine paused for more than 7 days does no work. Resume it or remove it so the account matches what you expect.",
   "summary": {
@@ -15,14 +16,28 @@
       "name": "a routine paused for longer than 7 days",
       "expect": "hit",
       "routines": [
-        { "id": "routine-1", "botId": "bot-1", "schedule": "every day at 08:00", "state": "paused", "lastRunAt": "2026-11-01T00:00:00Z" }
+        { "id": "routine-1", "botId": "bot-1", "schedule": "every day at 08:00", "state": "paused", "lastRunAt": "2026-11-01T00:00:00Z", "usage": null }
+      ]
+    },
+    {
+      "name": "a paused routine that has never run",
+      "expect": "hit",
+      "routines": [
+        { "id": "routine-1", "botId": "bot-1", "schedule": "every day at 08:00", "state": "paused", "lastRunAt": "never", "usage": null }
+      ]
+    },
+    {
+      "name": "a paused routine whose last run was not observed",
+      "expect": "miss",
+      "routines": [
+        { "id": "routine-1", "botId": "bot-1", "schedule": "every day at 08:00", "state": "paused", "lastRunAt": null, "usage": null }
       ]
     },
     {
       "name": "a routine paused for less than 7 days",
       "expect": "miss",
       "routines": [
-        { "id": "routine-1", "botId": "bot-1", "schedule": "every day at 08:00", "state": "paused", "lastRunAt": "2026-11-14T00:00:00Z" }
+        { "id": "routine-1", "botId": "bot-1", "schedule": "every day at 08:00", "state": "paused", "lastRunAt": "2026-11-14T00:00:00Z", "usage": null }
       ]
     }
   ]

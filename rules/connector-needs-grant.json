@@ -1,0 +1,26 @@
+{
+  "id": "connector-needs-grant",
+  "severity": "medium",
+  "effort": "small",
+  "rank": 25,
+  "dependsOnRole": true,
+  "title": "Give the bot access to the connector",
+  "why": "A connector that is connected but not shared with this bot cannot be used by it. Give the bot access, or remove the routines that depend on the connector.",
+  "summary": {
+    "one": "1 connector is connected, but this bot has no access to it.",
+    "many": "{count} connectors are connected, but this bot has no access to them."
+  },
+  "when": { "kind": "connector-status", "status": "needsGrant" },
+  "fixtures": [
+    {
+      "name": "a connector the bot has not been given access to",
+      "expect": "hit",
+      "connectors": [{ "name": "documents", "status": "needsGrant" }]
+    },
+    {
+      "name": "a connector that is still being set up",
+      "expect": "miss",
+      "connectors": [{ "name": "documents", "status": "initializing" }]
+    }
+  ]
+}

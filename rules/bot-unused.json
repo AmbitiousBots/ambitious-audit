@@ -3,6 +3,7 @@
   "severity": "medium",
   "effort": "small",
   "rank": 40,
+  "dependsOnRole": true,
   "title": "Decide what to do with the unused bot",
   "why": "A bot with no activity for 14 days may be forgotten. Use it, or remove it if it is no longer needed.",
   "summary": {
@@ -15,14 +16,28 @@
       "name": "a bot that has never been active",
       "expect": "hit",
       "bots": [
-        { "id": "bot-1", "name": "Helper", "lastActiveAt": null, "routineCount": 0, "usage": { "credits7d": null } }
+        { "id": "bot-1", "name": "Helper", "lastActiveAt": "never", "routineCount": 0, "usage": null }
+      ]
+    },
+    {
+      "name": "a bot last active 20 days before",
+      "expect": "hit",
+      "bots": [
+        { "id": "bot-1", "name": "Helper", "lastActiveAt": "2026-10-26T00:00:00Z", "routineCount": 0, "usage": null }
+      ]
+    },
+    {
+      "name": "a bot whose last activity was not observed",
+      "expect": "miss",
+      "bots": [
+        { "id": "bot-1", "name": "Helper", "lastActiveAt": null, "routineCount": null, "usage": null }
       ]
     },
     {
       "name": "a bot used the day before",
       "expect": "miss",
       "bots": [
-        { "id": "bot-1", "name": "Helper", "lastActiveAt": "2026-11-14T00:00:00Z", "routineCount": 1, "usage": { "credits7d": 1 } }
+        { "id": "bot-1", "name": "Helper", "lastActiveAt": "2026-11-14T00:00:00Z", "routineCount": 1, "usage": { "unit": "credits", "amount7d": 1 } }
       ]
     }
   ]

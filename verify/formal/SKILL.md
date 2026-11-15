@@ -1,6 +1,6 @@
 ---
 name: verify-formal-audit
-description: "Check the audit module's report delivery rules (stored at most once, no send before a required review, sent only if stored, bounded retries that always finish) against the TLA+ model, and the three payload schemas against their examples. Use when a change touches report ids, report build, report mark, the report states, retries, the routine that sends reports, or any file in spec/, schemas/ or src/domain/."
+description: "Check the audit module's report delivery rules (stored at most once, no send before a required review, sent only if stored, bounded retries that always finish) against the TLA+ model, and the payload schemas against their examples. Use when a change touches report ids, report build, report mark, the report states, retries, the routine that sends reports, or any file in spec/, schemas/ or src/domain/."
 ---
 
 # Formal verification for the audit module
@@ -19,6 +19,8 @@ Tool: TLA+ with the TLC model checker, because the question is whether any order
 
 Bounds: three reports and at most three calls per report, with no limit on the number of steps. `RetriesConverge` assumes the bot keeps going (it does not wait for ever on one call, retries while attempts are left, and confirms an answer it has seen); nothing is assumed about the network. `spec/README.md` lists what is left out.
 
+Unknown values are checked by exhaustive test, not by the model: `test/unknowns.test.ts` builds a collector document for every combination of the six groups of values a bot may be unable to observe (64 documents) and checks that rules fire only on observed values, that each gap becomes a visibility finding, that role-dependent recommendations are withheld when the role is unknown, and that a null whose visibility entry still says `seen: true` is refused. `npm test` runs it.
+
 The same command also checks the payload schemas in `schemas/`: every string and list is bounded, unknown fields are rejected, no schema has a field for the organisation, every valid example is accepted and every invalid example is rejected for the reason written next to it.
 
 ## The one command
@@ -33,7 +35,7 @@ bash spec/check.sh && npm ci && npx tsc --noEmit && npm run check:schemas
 
 ## Covered code
 
-Last confirmed in step with the code at commit `8fe2a3558ea46361f9bf2b67ae144f1558fd18eb`. The model describes the design in `spec/README.md` and the types in `src/domain/types.ts`.
+Last confirmed in step with the code at commit `ff1e554bb1b8525b6e94fc82d961292e2679d099`. The model describes the design in `spec/README.md` and the types in `src/domain/types.ts`.
 
 | Model part | Code it describes |
 |---|---|
@@ -45,7 +47,7 @@ Last confirmed in step with the code at commit `8fe2a3558ea46361f9bf2b67ae144f15
 | `ServiceStores`, `stored` | the service's handling of `send_report`: one stored copy per report id |
 | `schemas/*.json` | `src/domain/wire.generated.ts` (generated), `SendReportPayload`, `SendFeedbackPayload`, `WIRE_PATTERNS`, `WIRE_LIMITS` |
 
-Run `git log 8fe2a3558ea46361f9bf2b67ae144f1558fd18eb..HEAD -- src/domain src/db spec schemas scripts`. If it lists commits, read them against the table before you trust a pass. Move the commit above forward only after you have confirmed that every row still describes the code at the new commit.
+Run `git log ff1e554bb1b8525b6e94fc82d961292e2679d099..HEAD -- src/domain src/db spec schemas scripts`. If it lists commits, read them against the table before you trust a pass. Move the commit above forward only after you have confirmed that every row still describes the code at the new commit.
 
 One step in the model is one transaction in the code. The command runner opens that transaction for the whole command, so `buildStoredReport` and `markStoredReport` do not open another. If a mark is ever split across transactions, the model no longer describes it; model the split before relying on a pass.
 

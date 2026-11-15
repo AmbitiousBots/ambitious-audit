@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { isRecord } from "@ambitious/kit/domain/json";
 import botUnused from "../rules/bot-unused.json" with { type: "json" };
 import connectorNeedsAuth from "../rules/connector-needs-auth.json" with { type: "json" };
+import connectorNeedsGrant from "../rules/connector-needs-grant.json" with { type: "json" };
 import duplicateRoutines from "../rules/duplicate-routines.json" with { type: "json" };
 import failingRoutine from "../rules/failing-routine.json" with { type: "json" };
 import pausedRoutine from "../rules/paused-routine.json" with { type: "json" };
@@ -13,7 +14,7 @@ import { evaluateRules, parseRule, type RuleDefinition, type RuleHit } from "../
 import type { CollectorInput, EvidenceId } from "../src/domain/types.ts";
 import { isEvidenceId, isFingerprint, isReportId, isRuleId } from "../src/domain/types.ts";
 
-const FILES: readonly unknown[] = [failingRoutine, connectorNeedsAuth, pausedRoutine, botUnused, staleTasks, duplicateRoutines];
+const FILES: readonly unknown[] = [failingRoutine, connectorNeedsAuth, connectorNeedsGrant, pausedRoutine, botUnused, staleTasks, duplicateRoutines];
 
 type Fixture = {
   readonly name: string;
@@ -26,9 +27,14 @@ type Fixture = {
 
 const visibility: CollectorInput["visibility"] = [
   { signal: "transcripts", seen: false, why: "No tool reads conversations." },
-  { signal: "usage", seen: true, why: "Read from the usage view." },
+  { signal: "usage", seen: false, why: "Usage was not read for every bot and routine." },
   { signal: "otherBots", seen: true, why: "Listed with the bot list." },
   { signal: "auditLog", seen: false, why: "The account does not share the audit log." },
+  { signal: "accountRole", seen: true, why: "The member view shows the role." },
+  { signal: "tasks", seen: false, why: "Some task counts were not read." },
+  { signal: "pages", seen: true, why: "Counted with the page list tool." },
+  { signal: "botActivity", seen: false, why: "Some bots show no last-active time." },
+  { signal: "routines", seen: false, why: "Some routines show no run time." },
 ];
 
 const isFixture = (value: unknown): value is Fixture => {
@@ -91,10 +97,10 @@ test("recommendations stay within three and each cites evidence that exists", ()
   const snapshot = snapshotFor({
     name: "everything",
     expect: "hit",
-    bots: [{ id: "bot-1", name: "Helper", lastActiveAt: null, routineCount: 2, usage: { credits7d: null } }],
+    bots: [{ id: "bot-1", name: "Helper", lastActiveAt: "never", routineCount: 2, usage: null }],
     routines: [
-      { id: "routine-1", botId: "bot-1", schedule: "every day at 08:00", state: "failing", lastRunAt: "2026-11-01T00:00:00Z" },
-      { id: "routine-2", botId: "bot-1", schedule: "every day at 08:00", state: "paused", lastRunAt: "2026-11-01T00:00:00Z" },
+      { id: "routine-1", botId: "bot-1", schedule: "every day at 08:00", state: "failing", lastRunAt: "2026-11-01T00:00:00Z", usage: null },
+      { id: "routine-2", botId: "bot-1", schedule: "every day at 08:00", state: "paused", lastRunAt: "2026-11-01T00:00:00Z", usage: null },
     ],
     connectors: [{ name: "calendar", status: "needsAuth" }],
     tasks: { open: 4, stale7d: 2, blocked: 0 },
@@ -114,12 +120,12 @@ test("evidence for bot-10 is not cited for bot-1, and the same holds for routine
     collectedAt: "2026-11-15T00:00:00Z",
     account: { kind: "owner", label: "Main" },
     bots: [
-      { id: "bot-1", name: "Helper", lastActiveAt: null, routineCount: 0, usage: { credits7d: null } },
-      { id: "bot-10", name: "Worker", lastActiveAt: "2026-11-14T00:00:00Z", routineCount: 1, usage: { credits7d: 1 } },
+      { id: "bot-1", name: "Helper", lastActiveAt: "never", routineCount: 0, usage: null },
+      { id: "bot-10", name: "Worker", lastActiveAt: "2026-11-14T00:00:00Z", routineCount: 1, usage: { unit: "credits", amount7d: 1 } },
     ],
     routines: [
-      { id: "routine-1", botId: "bot-1", schedule: "every day at 08:00", state: "failing", lastRunAt: "2026-11-14T08:00:00Z" },
-      { id: "routine-10", botId: "bot-10", schedule: "every day at 09:00", state: "active", lastRunAt: "2026-11-14T09:00:00Z" },
+      { id: "routine-1", botId: "bot-1", schedule: "every day at 08:00", state: "failing", lastRunAt: "2026-11-14T08:00:00Z", usage: null },
+      { id: "routine-10", botId: "bot-10", schedule: "every day at 09:00", state: "active", lastRunAt: "2026-11-14T09:00:00Z", usage: null },
     ],
     connectors: [],
     tasks: { open: 0, stale7d: 0, blocked: 0 },
@@ -180,6 +186,7 @@ test("cited recommendation evidence stays in the report when the evidence list i
   const ruleHit = (id: string, rank: number, evidenceIds: EvidenceId[]): RuleHit => ({
     rule: { ...base, id: branded(id, isRuleId, "rule id"), rank },
     subjects: ["bot-1"],
+    withheld: false,
     evidenceIds,
     summary: "One bot has not been used.",
     fingerprint: branded(id, isFingerprint, "fingerprint"),
@@ -191,7 +198,7 @@ test("cited recommendation evidence stays in the report when the evidence list i
     ruleHit("bot-unused-late", 4, ids(21, 10)),
   ];
   const reportId = branded("018f0000-0000-7000-8000-000000000099", isReportId, "report id");
-  const { payload } = assembleReport(full, hits, new Set(), reportId, "0.1.0");
+  const { payload } = assembleReport(full, hits, new Set(), reportId, "0.2.0");
   const kept = new Set(payload.evidence.map((item) => item.id));
   assert.equal(payload.evidence.length, 30);
   for (const recommendation of payload.recommendations) {
@@ -205,7 +212,7 @@ test("a suppressed fingerprint is dropped and an unknown one is kept", () => {
   const snapshot = snapshotFor({
     name: "failing",
     expect: "hit",
-    routines: [{ id: "routine-1", botId: "bot-1", schedule: "every day at 08:00", state: "failing", lastRunAt: "2026-11-14T08:00:00Z" }],
+    routines: [{ id: "routine-1", botId: "bot-1", schedule: "every day at 08:00", state: "failing", lastRunAt: "2026-11-14T08:00:00Z", usage: null }],
   });
   const hits = evaluateRules(snapshot, [rule]);
   const fingerprint = hits[0]?.fingerprint;
