@@ -239,7 +239,7 @@ test("with an unknown role, three connectors that need a sign-in give one sign-i
   assert.equal(validateReport(payload), true);
   assert.equal(payload.accountKind, "unknown");
   assert.deepEqual(listOf(payload.recommendations).map((item) => item.id), ["connector-needs-auth"]);
-  assert.deepEqual(dataOf(payload.moduleVersions), { audit: "0.2.1" });
+  assert.deepEqual(dataOf(payload.moduleVersions), { audit: "0.2.2" });
 });
 
 test("with an unknown role, a connector that needs a sign-in but has no evidence line gets a finding and no recommendation", (t) => {
@@ -372,4 +372,61 @@ test("schema prints the collector schema, and schema with a command name prints 
     assert.equal(example({}), false, name);
   }
   assert.equal(run(home, ["schema", "nothing"]).exit, 1);
+});
+
+test("a routine created paused on the day of the snapshot, and one paused since an unknown time, give a report with no claim about how long", (t) => {
+  const home = freshHome(t);
+  const document = changed(fixture("shares.json"), (copy) => {
+    copy.routines = listOf(copy.routines).filter((routine) => routine.id !== "routine-3");
+    copy.evidence = listOf(copy.evidence).filter((item) => item.source !== "routine-3");
+  });
+  const stored = run(home, ["snapshot"], document);
+  assert.equal(stored.exit, 0, stored.stdout);
+  const snapshotId = dataOf(stored.data).snapshotId;
+  const normalized = dataOf(dataOf(stored.data).normalized);
+  assert.deepEqual(normalized.usageOther, { share: 0.08, botCount: 1 });
+  assert.deepEqual(normalized.weeklyLimitUsed, { percent: 37, asOf: "2026-11-15T00:00:00Z" });
+  assert.deepEqual(listOf(normalized.bots).map((bot) => (isRecord(bot.usage) ? bot.usage.share : bot.usage)), [0.62, 0.3, null]);
+
+  const findings = listOf(dataOf(run(home, ["findings"], JSON.stringify({ snapshotId })).data).findings);
+  assert.deepEqual(
+    findings.filter((finding) => finding.kind === "rule").map((finding) => [finding.ruleId, finding.severity, finding.summary, finding.evidenceIds]),
+    [["paused-routine-since-unknown", "low", "1 routine is paused, and the account did not show since when.", ["ev-2"]]],
+  );
+  const recommended = listOf(dataOf(run(home, ["recommend"], JSON.stringify({ snapshotId })).data).recommendations);
+  assert.deepEqual(recommended.map((item) => item.id), ["paused-routine-since-unknown"]);
+
+  const built = run(home, ["report", "build"], JSON.stringify({ snapshotId, reviewRequired: true }));
+  assert.equal(built.exit, 0, built.stdout);
+  const payload = dataOf(dataOf(built.data).payload);
+  assert.equal(validateReport(payload), true);
+  assert.doesNotMatch(JSON.stringify([payload.summary, payload.findings, payload.recommendations]), /\d+\s*\+?\s*days|for more than/);
+  assert.deepEqual(dataOf(payload.counts).routines, { active: 1, paused: 2, failing: 0 });
+  assert.ok(listOf(payload.visibility).some((entry) => entry.signal === "usage" && entry.seen === false && String(entry.why).includes("one summed line for the rest")));
+});
+
+test("a routine whose pause time is 8 days before the snapshot is reported as paused for more than 7 days", (t) => {
+  const home = freshHome(t);
+  const snapshotId = dataOf(run(home, ["snapshot"], fixture("shares.json")).data).snapshotId;
+  const findings = listOf(dataOf(run(home, ["findings"], JSON.stringify({ snapshotId })).data).findings);
+  assert.deepEqual(
+    findings.filter((finding) => finding.kind === "rule").map((finding) => [finding.ruleId, finding.severity, finding.summary, finding.evidenceIds]),
+    [
+      ["paused-routine", "medium", "1 routine has been paused for more than 7 days.", ["ev-1"]],
+      ["paused-routine-since-unknown", "low", "1 routine is paused, and the account did not show since when.", ["ev-2"]],
+    ],
+  );
+});
+
+test("schema describes the pause time and usage as shares, so a collector can learn them from the command", (t) => {
+  const home = freshHome(t);
+  const defs = dataOf(dataOf(dataOf(run(home, ["schema"]).data).schema).$defs);
+  const routine = dataOf(dataOf(defs.routine).properties);
+  assert.match(String(dataOf(routine.pausedAt).description), /Leave it out when the account does not show it/);
+  assert.ok(isRecord(routine.createdAt));
+  const usage = dataOf(dataOf(defs.botUsage).properties);
+  assert.deepEqual(dataOf(usage.unit).enum, ["credits", "percent", "share"]);
+  assert.deepEqual(dataOf(usage.period).enum, ["this_week", "last_7_days", "last_30_days"]);
+  const top = dataOf(dataOf(dataOf(run(home, ["schema", "snapshot"]).data).schema).properties);
+  assert.ok(isRecord(top.usageOther) && isRecord(top.weeklyLimitUsed));
 });

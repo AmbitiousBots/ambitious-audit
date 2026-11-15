@@ -15,10 +15,10 @@ const base: unknown = JSON.parse(
     schemaVersion: 1,
     collectedAt: "2026-11-15T00:00:00Z",
     account: { kind: "owner", label: "Main" },
-    bots: [{ id: "bot-1", name: "Helper", lastActiveAt: "never", routineCount: 2, usage: { unit: "percent", amount7d: 100 } }],
+    bots: [{ id: "bot-1", name: "Helper", lastActiveAt: "never", routineCount: 2, usage: { unit: "percent", amount7d: 0 } }],
     routines: [
-      { id: "routine-1", botId: "bot-1", schedule: "every day at 08:00", state: "paused", lastRunAt: "2026-11-01T00:00:00Z", usage: { unit: "percent", amount7d: 60 } },
-      { id: "routine-2", botId: "bot-1", schedule: "every day at 08:00", state: "failing", lastRunAt: "2026-11-14T08:00:00Z", usage: { unit: "percent", amount7d: 40 } },
+      { id: "routine-1", botId: "bot-1", schedule: "every day at 08:00", state: "paused", lastRunAt: "2026-11-01T00:00:00Z", pausedAt: "2026-11-02T00:00:00Z", usage: { unit: "percent", amount7d: 0 } },
+      { id: "routine-2", botId: "bot-1", schedule: "every day at 08:00", state: "failing", lastRunAt: "2026-11-14T08:00:00Z", usage: { unit: "percent", amount7d: 0 } },
     ],
     connectors: [
       { name: "calendar", status: "needsAuth" },
@@ -49,7 +49,7 @@ const GROUPS: readonly Group[] = [
   { signal: "botActivity", rules: ["bot-unused"], hide: (document) => (document.bots = each(document.bots, (bot) => ({ ...bot, lastActiveAt: null }))) },
   {
     signal: "routines",
-    rules: ["paused-routine"],
+    rules: [],
     hide: (document) => {
       document.bots = each(document.bots, (bot) => ({ ...bot, routineCount: null }));
       document.routines = each(document.routines, (routine) => ({ ...routine, lastRunAt: null }));
@@ -67,7 +67,7 @@ const GROUPS: readonly Group[] = [
 
 const GIVEN_IN_ANY_MODE = [...OWN_CONNECTOR_RULE_IDS, "stale-tasks"];
 
-const ALWAYS = ["failing-routine", "connector-needs-auth", "connector-needs-grant", "duplicate-routines"];
+const ALWAYS = ["failing-routine", "connector-needs-auth", "connector-needs-grant", "paused-routine", "duplicate-routines"];
 
 const documentWith = (hidden: readonly Group[], admitted: readonly Group[]): Record<string, unknown> => {
   const document: unknown = JSON.parse(JSON.stringify(base));

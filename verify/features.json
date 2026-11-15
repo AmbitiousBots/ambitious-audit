@@ -1,7 +1,7 @@
 [
   {
     "id": "audit-flow",
-    "userVisible": "A fresh account can be snapshotted, diffed, limited to three evidence-backed recommendations, and turned into a schema-valid report that is reviewed before it is marked sent. An account where nothing could be observed gets only visibility findings, no recommendation, and a report that says the role is unknown and holds no invented count. An account whose role is unknown still gets evidence-backed advice about the bot's own connectors, and no advice that depends on the role. A null with no matching visibility gap is refused with the field and the rule named.",
+    "userVisible": "A fresh account can be snapshotted, diffed, limited to three evidence-backed recommendations, and turned into a schema-valid report that is reviewed before it is marked sent. An account where nothing could be observed gets only visibility findings, no recommendation, and a report that says the role is unknown and holds no invented count. An account whose role is unknown still gets evidence-backed advice about the bot's own connectors, and no advice that depends on the role. A null with no matching visibility gap is refused with the field and the rule named. A paused routine is reported as paused for more than 7 days only when the account showed when it was paused; without that it gets at most a low finding that names no duration, and none when it was created within the last 7 days. Usage given as each bot's share of a period is stored as written, and a bot the usage report did not list is unseen, never unused.",
     "check": "node verify/audit.mjs"
   },
   {
