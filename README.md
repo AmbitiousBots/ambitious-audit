@@ -2,7 +2,7 @@
 
 The audit module turns what a bot can see in an account into a snapshot, diffs it against a stored baseline, applies rule-based findings and returns at most three recommendations, each citing its evidence, plus a map of what the bot could not see. A value the bot could not observe is recorded as unknown, never as zero, and no finding is made from it. It is a command-line tool with JSON in and JSON out, one SQLite file and no user interface. The bot shows results in its own pages. A report leaves the computer only when the customer has approved the tool that sends it.
 
-The module follows the shared module contract in [ambitious-kit](https://github.com/AmbitiousBots/ambitious-kit/blob/kit-v0.2.1/MODULE_CONTRACT.md): one binary, a JSON envelope on stdout, one SQLite file, deterministic with `--now` and `--seed`, and no network. Version 0.2.1 uses kit 0.2.1, kept under `vendor/` so a build does not download it.
+The module follows the shared module contract in [ambitious-kit](https://github.com/AmbitiousBots/ambitious-kit/blob/kit-v0.2.6/MODULE_CONTRACT.md): one binary, a JSON envelope on stdout, one SQLite file, deterministic with `--now` and `--seed`, and no network. Version 0.2.2 uses kit 0.2.6, kept under `vendor/` so a build does not download it.
 
 Part of [Ambitious](https://ambitiousbots.com). Licensed under the Apache License, Version 2.0; see [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
@@ -45,6 +45,7 @@ The collector document is described by [schemas/collector.v1.json](schemas/colle
 | `tasks.open`, `tasks.stale7d`, `tasks.blocked` | `null` | `tasks` |
 | `pages.count`, `pages.updated7d` | `null` | `pages` |
 | `bots[].lastActiveAt` | `null` | `botActivity` |
+| `routines[].pausedAt`, `routines[].createdAt` | left out | none; a paused routine with no `pausedAt` is reported without a duration |
 | `bots[].routineCount`, `routines[].lastRunAt` | `null` | `routines` |
 | `bots[].usage`, `routines[].usage` | `null` | `usage` |
 
@@ -52,7 +53,22 @@ The collector document is described by [schemas/collector.v1.json](schemas/colle
 
 Task counts come from the output of the ambitious-tasks module, which keeps the bot's task list. When that module is not installed, or its output was not read, all three counts are `null`.
 
-Usage is `{ "unit": "credits" | "percent", "amount7d": number }` for the 7 days before `collectedAt`, or `null`. Use `percent` when the account reports each bot's share of the total rather than credits. The `usage` signal counts as seen only when usage was observed for every listed bot and every listed routine, in either unit.
+### Usage
+
+Usage on a bot or a routine is `null` when it was not observed. Otherwise it takes one of two forms, chosen by `unit`:
+
+| Form | Where | Meaning |
+|---|---|---|
+| `{ "unit": "credits" \| "percent", "amount7d": number }` | bots and routines | An amount for the 7 days before `collectedAt`: credits used, or a percentage from 0 to 100. |
+| `{ "unit": "share", "period": "this_week" \| "last_7_days" \| "last_30_days", "share": number, "periodStart"?, "periodEnd"? }` | bots only | The bot's share, from 0 to 1, of all the account's bot usage in the named period. `this_week` is the current week so far. |
+
+The share form is for an account whose usage report gives each bot's share of a period, lists only the bots that used the most, and sums the rest as one line. Such a report fills three things:
+
+- Each bot it lists by name gets a `usage` in share form. Every share in one document names the same period.
+- `usageOther: { "share": number, "botCount"?: number }` at the top of the document holds the summed line for the bots it did not list. It needs at least one listed share, which says what period it covers.
+- `weeklyLimitUsed: { "percent": number, "asOf": time }` at the top of the document holds how much of the weekly limit is used, when the account reports it. Reports give it for the current week only; leave it out otherwise.
+
+A bot counted only in the summed line has `usage: null`. Its own share was not observed, so the `usage` signal says `seen: false` and its `why` says that the bot is inside the summed line. The same holds for routines when the report gives nothing per routine. The `usage` signal counts as seen only when usage was observed for every listed bot and every listed routine. A share is never turned into credits or into a percentage of the limit.
 
 The visibility map has exactly one entry for each of nine signals: `transcripts`, `usage`, `otherBots`, `auditLog`, `accountRole`, `tasks`, `pages`, `botActivity` and `routines`. Each entry with `seen: false` becomes a finding of kind `visibility`, so the list of findings always says what the audit does not cover. Those findings never become recommendations.
 
@@ -78,12 +94,17 @@ Rules live in `rules/*.json`. Each one has a positive fixture and a negative fix
 | `failing-routine` | A routine's state is `failing`. | yes |
 | `connector-needs-auth` | A connector's status is `needsAuth`. | no |
 | `connector-needs-grant` | A connector's status is `needsGrant`: it is connected, but this bot has no access to it. | no |
-| `paused-routine` | A routine is paused, and its last run is `"never"` or more than 7 days before the snapshot. | yes |
-| `bot-unused` | A bot's last activity is `"never"` or more than 14 days before the snapshot. | yes |
+| `paused-routine` | A routine is paused, and its `pausedAt` is more than 7 days before the snapshot. | yes |
+| `paused-routine-since-unknown` | A routine is paused, the document gives no `pausedAt`, and the routine was neither created nor run in the 7 days before the snapshot. Severity is low, and the finding names no duration. | yes |
+| `bot-unused` | A bot's last activity is `"never"` or more than 14 days before the snapshot, or its last activity was not observed and it is listed with a share of 0 for the last 30 days. Never when its usage shows use within the last 14 days. | yes |
 | `stale-tasks` | The count of tasks with no change in 7 days is greater than the threshold in the rule file. | no |
 | `duplicate-routines` | Two routines on the same bot share a schedule. | yes |
 
-A rule never fires on a value that is `null`. A paused routine whose last run was not observed, a bot whose last activity was not observed, and task counts that were not observed produce no rule finding. Connector statuses `ok`, `initializing` and `error` produce no finding. `dependsOnRole` in a rule file says whether its recommendation is withheld when the role is unknown. A rule that fires on a connector status cites only evidence whose `source` is the name of one of this bot's connectors, so it must have `dependsOnRole: false`. Those rules are listed by id in `OWN_CONNECTOR_RULE_IDS` in `src/domain/rule-pack.ts`, and the module refuses to start when that list, the rule files and the `dependsOnRole` values disagree.
+A rule never fires on a value that is `null` or left out. A bot whose last activity and usage were not observed, and task counts that were not observed, produce no rule finding.
+
+How long a routine has been paused is known only from `pausedAt`, the time the account shows for the pause. The last run does not show it: a routine that last ran a month ago, or never, may have been paused today. So a paused routine with no `pausedAt` is never reported as paused for a number of days. It gets the low finding `paused-routine-since-unknown`, which says only that it is paused and that the account did not show since when. It gets no finding at all when `createdAt` or `lastRunAt` falls in the 7 days before the snapshot, because it cannot have been idle for longer than that.
+
+A bot is reported as unused from its usage only when the usage report lists it with a share of 0 for `last_30_days`, a period that covers the 14 days. A share of 0 for a week does not prove 14 unused days, and a missing usage proves nothing. Usage above 0 in a period that lies within the last 14 days (`amount7d`, `this_week` or `last_7_days`) means the bot was used, whatever `lastActiveAt` says. Connector statuses `ok`, `initializing` and `error` produce no finding. `dependsOnRole` in a rule file says whether its recommendation is withheld when the role is unknown. A rule that fires on a connector status cites only evidence whose `source` is the name of one of this bot's connectors, so it must have `dependsOnRole: false`. Those rules are listed by id in `OWN_CONNECTOR_RULE_IDS` in `src/domain/rule-pack.ts`, and the module refuses to start when that list, the rule files and the `dependsOnRole` values disagree.
 
 Ages are measured from the snapshot's `collectedAt`, not from the clock. A recommendation is kept only when it cites at least one evidence id present in the snapshot. A recommendation whose fingerprint was marked `sent` is dropped for the number of days in `rules/settings.json` (21 by default).
 
@@ -105,7 +126,7 @@ When an input does not match its schema, `errors` holds one `E_INPUT_SCHEMA` ent
 }
 ```
 
-`data.fields` lists every failing pointer with its rule, up to 50. Rules named after JSON Schema keywords (`type`, `required`, `enum`, `pattern`, `additionalProperties` and so on) come from the schema. The module adds `unique` (a repeated id), `null-needs-visibility-gap`, `role-needs-a-source` and `percent-range` (a percentage above 100).
+`data.fields` lists every failing pointer with its rule, up to 50. Rules named after JSON Schema keywords (`type`, `required`, `enum`, `pattern`, `additionalProperties` and so on) come from the schema. `false schema` means a field that does not go with the form the value takes, such as `amount7d` beside `"unit": "share"`. The module adds `unique` (a repeated id), `null-needs-visibility-gap`, `role-needs-a-source`, `percent-range` (a percentage above 100), `usage-one-period` (shares from different periods in one document), `period-order` (a period that starts after it ends) and `usage-other-needs-a-share` (`usageOther` with no listed share to give it a period).
 
 This module adds:
 
@@ -120,6 +141,16 @@ This module adds:
 | `E_ATTEMPTS_EXHAUSTED` | 1 | The report has already failed the maximum number of times. | Leave it failed. Build a new report when there is something new to send. |
 
 Detail such as the states in a refused transition is in `data`, not in the error object.
+
+## Moving from 0.2.1
+
+- A collector document accepted by 0.2.0 or 0.2.1 is accepted unchanged and stored exactly as before. Stored snapshots and reports are read as they are, and the report payload is still version 2. Everything new in the collector document is optional.
+- `paused-routine` no longer measures a pause from the last run. It fires only when the routine carries `pausedAt` and that time is more than 7 days before the snapshot. Before, a routine created paused on the day of the snapshot, with a last run of `"never"`, was reported as paused for more than 7 days. A collector that writes no `pausedAt` now gets `paused-routine-since-unknown` instead, at low severity and with no duration, or nothing when the routine was created or run in the last 7 days. To keep the 7-day finding, write `pausedAt` when the account shows it.
+- Routines take two new optional times, `pausedAt` and `createdAt`. Leave each out when the account does not show it.
+- Bot usage takes a second form, `{ "unit": "share", "period", "share" }`, and the document takes optional `usageOther` and `weeklyLimitUsed`; see [Usage](#usage). The `{ unit, amount7d }` form is unchanged.
+- `bot-unused` now reads usage as well as `lastActiveAt`, as the rules section describes. One result changes for documents written before: a bot whose `lastActiveAt` is `"never"` or old while its `amount7d` is above 0 is no longer reported as unused.
+- A rule file that used `"kind": "routine-state"` with `olderThanDays` is refused; use `"kind": "routine-paused-for"`.
+- The vendored kit moves from 0.2.1 to 0.2.6.
 
 ## Moving from 0.2.0
 
