@@ -33,19 +33,19 @@ bash spec/check.sh && npm ci && npx tsc --noEmit && npm run check:schemas
 
 ## Covered code
 
-Last confirmed in step with the code at commit `c141eba46aa4842e5929e5f52dd1b72ccfabec35`. The model describes the design in `spec/README.md` and the types in `src/domain/types.ts`.
+Last confirmed in step with the code at commit `20bc340963802e6ff8157fe98959d96176e26083`. At that commit the delivery code does not exist yet; the model describes the design in `spec/README.md` and the types in `src/domain/types.ts`.
 
 | Model part | Code it describes |
 |---|---|
-| `ReportIdFor` | `deriveReportId` in `src/domain/report.ts`: the report id comes from the snapshot, the seed and `--now`, never from the attempt |
-| `Build` | `buildStoredReport` in `src/db/store.ts`; `Report` |
-| `Review`, `SeeAnswer`, `Fail`, `Ack` | `markStoredReport`; `applyMark` in `src/domain/delivery.ts` |
-| `ReadyToSend`, `StartSend`, `Retry` | `nextDeliveryStep`, and the routine in `skills/snapshot-routine` |
-| `failures`, `MaxAttempts` | `Report.failures`, counted when a mark is `failed`; `DELIVERY_POLICY.maxAttempts` |
+| `ReportIdFor` | `DeriveReportId` in `src/domain/types.ts`: the report id comes from the snapshot and the seed, never from the attempt |
+| `Build` | the `report build` command; `Report` |
+| `Review`, `SeeAnswer`, `Fail`, `Ack` | the `report mark` command; `ApplyMark`, `MarkAllowedFrom`, `ReportMark` |
+| `ReadyToSend`, `StartSend`, `Retry` | `NextDeliveryStep`, `DeliveryStep`, `DeliveryPolicy`, and the routine that calls the service |
+| `failures`, `MaxAttempts` | `Report.failures`, counted from the `failed` rows of `report_events`; `DeliveryPolicy.maxAttempts` |
 | `ServiceStores`, `stored` | the service's handling of `send_report`: one stored copy per report id |
 | `schemas/*.json` | `src/domain/wire.generated.ts` (generated), `SendReportPayload`, `SendFeedbackPayload`, `WIRE_PATTERNS`, `WIRE_LIMITS` |
 
-Run `git log c141eba46aa4842e5929e5f52dd1b72ccfabec35..HEAD -- src/domain src/db spec schemas scripts`. If it lists commits, read them against the table before you trust a pass. Move the commit above forward only after you have confirmed that every row still describes the code at the new commit.
+Run `git log 20bc340963802e6ff8157fe98959d96176e26083..HEAD -- src/domain src/db spec schemas scripts`. If it lists commits, read them against the table before you trust a pass. Move the commit above forward only after you have confirmed that every row still describes the code at the new commit.
 
 One step in the model is one transaction in the code. If a mark is ever split across transactions, the model no longer describes it; model the split before relying on a pass.
 
