@@ -5,16 +5,35 @@ import { isRecord } from "@ambitious/kit/domain/json";
 import { canonicalJson } from "../domain/canonical.ts";
 import { applyMark, DELIVERY_POLICY, nextDeliveryStep } from "../domain/delivery.ts";
 import { diffJson } from "../domain/diff.ts";
-import type { LooseId, ReportBuildFields, ReportMarkFields } from "../domain/input.ts";
-import { requireBaselineId, requireMark, requireReviewRequired, requireSnapshotId, requireTargetId } from "../domain/input.ts";
 import { asJsonValue } from "../domain/json-value.ts";
-import { assembleReport, capRecommendations, deriveReportId, findingsFrom, payloadSha256, recommendationsFrom } from "../domain/report.ts";
+import { assembleReport, capRecommendations, deriveReportId, findingsFrom, payloadSha256, recommendationsFrom, ruleFinding, withheldRules } from "../domain/report.ts";
 import { RULES, SUPPRESSION_DAYS } from "../domain/rule-pack.ts";
 import { evaluateRules } from "../domain/rules.ts";
-import { isCollectorDocument, isReportPayload } from "../domain/schema.ts";
+import { collectorProblems, isCollectorDocument, isReportPayload, isReportV1Payload } from "../domain/schema.ts";
 import { addDays, formatTimestamp, parseTimestamp } from "../domain/time.ts";
-import type { BaselineId, CollectorInput, DeliveryStep, Fingerprint, Finding, MarkError, Recommendations, Report, ReportId, SendReportPayload, Sha256Hex, SnapshotId, Timestamp } from "../domain/types.ts";
-import { isFingerprint, isReportId, isSha256Hex, isSnapshotId, isTimestamp, REPORT_STATES, type ReportState } from "../domain/types.ts";
+import type {
+  BaselineId,
+  BaselineSetInput,
+  CollectorInput,
+  DeliveryStep,
+  DiffInput,
+  Fingerprint,
+  FindingsInput,
+  FindingsOutput,
+  MarkError,
+  RecommendInput,
+  RecommendOutput,
+  Report,
+  ReportBuildInput,
+  ReportId,
+  ReportMarkInput,
+  SendReportPayload,
+  Sha256Hex,
+  SnapshotId,
+  Timestamp,
+} from "../domain/types.ts";
+import { auditModeOf, isFingerprint, isReportId, isSha256Hex, isSnapshotId, isTimestamp, REPORT_STATES, type ReportState } from "../domain/types.ts";
+import type { SendReportV1 } from "../domain/wire.generated.ts";
 import { baselineIdFrom, entropyHex, snapshotIdFrom } from "../domain/uuid.ts";
 
 type Digest = (text: string) => Sha256Hex;
@@ -47,7 +66,14 @@ const readSnapshot = (db: Db, id: SnapshotId): CollectorInput => {
   const json = row === null ? undefined : row.json;
   if (typeof json !== "string") return notFoundSnapshot(id);
   const parsed = parseStored(json);
-  if (!isCollectorDocument(parsed)) throw failure("E_DB", `The snapshot ${id} is not a collector document.`, "Run selfcheck and read data.problems.");
+  if (!isCollectorDocument(parsed)) {
+    throw failure(
+      "E_SNAPSHOT_FORMAT",
+      `The snapshot ${id} was stored in a form this version does not read.`,
+      "Collect the account again, run snapshot, and use the new snapshotId. Set a new baseline if this snapshot was the baseline.",
+      { snapshotId: id, fields: collectorProblems(parsed).slice(0, 50).map((problem) => ({ pointer: problem.pointer, rule: problem.rule })) },
+    );
+  }
   return parsed;
 };
 
@@ -133,9 +159,9 @@ const readReport = (db: Db, id: ReportId): StoredReport | null => {
   return row === null ? null : reportFrom(row);
 };
 
-const payloadOf = (text: string): SendReportPayload => {
+const payloadOf = (text: string): SendReportPayload | SendReportV1 => {
   const parsed = parseStored(text);
-  if (!isReportPayload(parsed)) throw failure("E_DB", "A stored report payload does not match the report schema.", "Run selfcheck and read data.problems.");
+  if (!isReportPayload(parsed) && !isReportV1Payload(parsed)) throw failure("E_DB", "A stored report payload does not match the report schema.", "Run selfcheck and read data.problems.");
   return parsed;
 };
 
@@ -154,10 +180,7 @@ const rememberRows = (db: Db, snapshotId: SnapshotId, hits: ReturnType<typeof ev
   db.prepare("DELETE FROM recommendations WHERE snapshot_id = ?").run(snapshotId);
   const insertFinding = db.prepare("INSERT INTO findings (snapshot_id, rule_id, json) VALUES (?, ?, ?)");
   const insertRecommendation = db.prepare("INSERT INTO recommendations (id, snapshot_id, json, fingerprint) VALUES (?, ?, ?, ?)");
-  for (const item of hits) {
-    const finding: Finding = { ruleId: item.rule.id, severity: item.rule.severity, evidenceIds: item.evidenceIds, summary: item.summary };
-    insertFinding.run(snapshotId, item.rule.id, JSON.stringify(finding));
-  }
+  for (const item of hits) insertFinding.run(snapshotId, item.rule.id, JSON.stringify(ruleFinding(item)));
   for (const item of ranked) insertRecommendation.run(item.recommendation.id, snapshotId, JSON.stringify(item.recommendation), item.fingerprint);
 };
 
@@ -201,8 +224,8 @@ export const putSnapshot = (db: Db, input: CollectorInput, clock: Clock, rng: Rn
   return { snapshotId: id, normalized: input };
 };
 
-export const putBaseline = (db: Db, input: LooseId, clock: Clock, rng: Rng, digest: Digest): { readonly baselineId: BaselineId } => {
-  const snapshotId = requireSnapshotId(input.snapshotId);
+export const putBaseline = (db: Db, input: BaselineSetInput, clock: Clock, rng: Rng, digest: Digest): { readonly baselineId: BaselineId } => {
+  const snapshotId = input.snapshotId;
   readSnapshot(db, snapshotId);
   const id = baselineIdFrom(clock.now().getTime(), digest(`${snapshotId}:${entropyHex(rng)}`));
   if (rowOf(db.prepare("SELECT id FROM baselines WHERE id = ?").get(id)) === null) {
@@ -211,33 +234,34 @@ export const putBaseline = (db: Db, input: LooseId, clock: Clock, rng: Rng, dige
   return { baselineId: id };
 };
 
-export const readDiff = (db: Db, input: LooseId): { readonly changes: ReturnType<typeof diffJson> } => {
-  const to = requireTargetId(input.to);
-  const fromSnapshot = input.from === undefined ? latestBaselineSnapshot(db) : readBaselineSnapshot(db, requireBaselineId(input.from));
+export const readDiff = (db: Db, input: DiffInput): { readonly changes: ReturnType<typeof diffJson> } => {
+  const to = input.to;
+  const fromSnapshot = input.from === undefined ? latestBaselineSnapshot(db) : readBaselineSnapshot(db, input.from);
   if (fromSnapshot === null) throw failure("E_NO_BASELINE", "No baseline is set, and diff was not given a from id.", "Run baseline set, or pass from.", {});
   return { changes: diffJson(asJsonValue(readSnapshot(db, fromSnapshot)), asJsonValue(readSnapshot(db, to))) };
 };
 
-export const readFindings = (db: Db, input: LooseId): { readonly findings: readonly Finding[] } => ({
-  findings: findingsFrom(evaluateRules(readSnapshot(db, requireSnapshotId(input.snapshotId)), RULES)),
-});
+export const readFindings = (db: Db, input: FindingsInput): FindingsOutput => {
+  const snapshot = readSnapshot(db, input.snapshotId);
+  return { mode: auditModeOf(snapshot), findings: findingsFrom(snapshot, evaluateRules(snapshot, RULES)) };
+};
 
-export const readRecommendations = (db: Db, input: LooseId, clock: Clock): { readonly recommendations: Recommendations } => {
-  const snapshot = readSnapshot(db, requireSnapshotId(input.snapshotId));
-  const ranked = recommendationsFrom(evaluateRules(snapshot, RULES), suppressedFingerprints(db, clock.now().getTime()));
-  return { recommendations: capRecommendations(ranked.map((item) => item.recommendation)) };
+export const readRecommendations = (db: Db, input: RecommendInput, clock: Clock): RecommendOutput => {
+  const snapshot = readSnapshot(db, input.snapshotId);
+  const hits = evaluateRules(snapshot, RULES);
+  const ranked = recommendationsFrom(hits, suppressedFingerprints(db, clock.now().getTime()));
+  return { mode: auditModeOf(snapshot), recommendations: capRecommendations(ranked.map((item) => item.recommendation)), withheld: withheldRules(hits) };
 };
 
 export const buildStoredReport = (
   db: Db,
-  input: ReportBuildFields,
+  input: ReportBuildInput,
   clock: Clock,
   rng: Rng,
   digest: Digest,
   version: string,
-): { readonly reportId: ReportId; readonly payload: SendReportPayload; readonly next: DeliveryStep } => {
-  const snapshotId = requireSnapshotId(input.snapshotId);
-  const reviewRequired = requireReviewRequired(input.reviewRequired);
+): { readonly reportId: ReportId; readonly payload: SendReportPayload | SendReportV1; readonly next: DeliveryStep } => {
+  const { snapshotId, reviewRequired } = input;
   const snapshot = readSnapshot(db, snapshotId);
   const nowMs = clock.now().getTime();
   const reportId = deriveReportId(snapshotId, rng, nowMs, digest);
@@ -276,11 +300,10 @@ export const buildStoredReport = (
   return { reportId, payload: payloadOf(payloadJson), next: nextDeliveryStep(report, DELIVERY_POLICY) };
 };
 
-export const markStoredReport = (db: Db, input: ReportMarkFields): { readonly report: Report; readonly next: DeliveryStep } => {
-  const mark = requireMark(input);
+export const markStoredReport = (db: Db, mark: ReportMarkInput): { readonly report: Report; readonly next: DeliveryStep } => {
   const existing = readReport(db, mark.reportId);
   if (existing === null) throw failure("E_REPORT_NOT_FOUND", `No report has id ${mark.reportId}.`, "Build the report first, then mark that report id.", { reportId: mark.reportId });
-  const applied = applyMark(existing, { reportId: mark.reportId, state: mark.state, at: storedTime(mark.at) }, DELIVERY_POLICY);
+  const applied = applyMark(existing, mark, DELIVERY_POLICY);
   if (!applied.ok) return markError(applied.error);
   const next = applied.value;
   db.prepare("UPDATE reports SET state = ?, failures = ?, updated_at = ? WHERE report_id = ?").run(next.state, next.failures, next.updatedAt, next.reportId);

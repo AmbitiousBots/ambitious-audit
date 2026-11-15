@@ -16,5 +16,14 @@ export const formatTimestamp = (instantMs: number): Timestamp => {
 
 export const addDays = (instantMs: number, days: number): number => instantMs + days * DAY_MS;
 
-export const olderThanDays = (referenceMs: number, earlierMs: number | null, days: number): boolean =>
-  earlierMs === null || referenceMs - earlierMs > days * DAY_MS;
+export type Observed = { readonly known: false } | { readonly known: true; readonly at: number | "never" };
+
+export const observedInstant = (value: string | null): Observed => {
+  if (value === null) return { known: false };
+  if (value === "never") return { known: true, at: "never" };
+  const at = parseTimestamp(value);
+  return at === null ? { known: false } : { known: true, at };
+};
+
+export const olderThanDays = (referenceMs: number, earlier: Observed, days: number): boolean =>
+  earlier.known && (earlier.at === "never" || referenceMs - earlier.at > days * DAY_MS);

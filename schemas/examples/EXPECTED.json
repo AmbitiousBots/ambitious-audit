@@ -102,5 +102,101 @@
   "collector.v1/invalid/evidence-id-malformed.json": {
     "keyword": "pattern",
     "at": "/evidence/0/id"
+  },
+  "send_report.v2/invalid/organisation-id-in-body.json": {
+    "keyword": "additionalProperties",
+    "at": ""
+  },
+  "send_report.v2/invalid/organisation-id-nested.json": {
+    "keyword": "additionalProperties",
+    "at": "/counts"
+  },
+  "send_report.v2/invalid/transcript-field-on-finding.json": {
+    "keyword": "additionalProperties",
+    "at": "/findings/0"
+  },
+  "send_report.v2/invalid/summary-over-1200-characters.json": {
+    "keyword": "maxLength",
+    "at": "/summary"
+  },
+  "send_report.v2/invalid/evidence-text-over-280-characters.json": {
+    "keyword": "maxLength",
+    "at": "/evidence/0/text"
+  },
+  "send_report.v2/invalid/four-recommendations.json": {
+    "keyword": "maxItems",
+    "at": "/recommendations"
+  },
+  "send_report.v2/invalid/recommendation-without-evidence.json": {
+    "keyword": "minItems",
+    "at": "/recommendations/0/evidenceIds"
+  },
+  "send_report.v2/invalid/report-id-is-uuid-v4.json": {
+    "keyword": "pattern",
+    "at": "/reportId"
+  },
+  "send_report.v2/invalid/visibility-missing-a-signal.json": {
+    "keyword": "minItems",
+    "at": "/visibility"
+  },
+  "send_report.v2/invalid/visibility-repeats-a-signal.json": {
+    "keyword": "contains",
+    "at": "/visibility"
+  },
+  "send_report.v2/invalid/audit-version-missing.json": {
+    "keyword": "required",
+    "at": "/moduleVersions"
+  },
+  "send_report.v2/invalid/wrong-schema-version.json": {
+    "keyword": "const",
+    "at": "/schemaVersion"
+  },
+  "send_report.v2/invalid/account-kind-missing.json": {
+    "keyword": "required",
+    "at": ""
+  },
+  "send_report.v2/invalid/withheld-for-an-unknown-reason.json": {
+    "keyword": "enum",
+    "at": "/findings/0/withheld"
+  },
+  "send_report.v2/invalid/finding-without-kind.json": {
+    "keyword": "required",
+    "at": "/findings/0"
+  },
+  "send_report.v2/invalid/unobserved-count-left-out.json": {
+    "keyword": "required",
+    "at": "/counts/tasks"
+  },
+  "send_report.v2/invalid/evidence-source-over-128-characters.json": {
+    "keyword": "maxLength",
+    "at": "/evidence/0/source"
+  },
+  "collector.v1/invalid/usage-as-credits7d.json": {
+    "keyword": "additionalProperties",
+    "at": "/bots/0/usage"
+  },
+  "collector.v1/invalid/usage-unknown-unit.json": {
+    "keyword": "enum",
+    "at": "/bots/0/usage/unit"
+  },
+  "collector.v1/invalid/task-count-left-out.json": {
+    "keyword": "required",
+    "at": "/tasks"
+  },
+  "collector.v1/invalid/last-active-is-a-date-without-time.json": {
+    "keyword": "pattern",
+    "at": "/bots/0/lastActiveAt"
+  },
+  "collector.v1/invalid/unknown-connector-status.json": {
+    "keyword": "enum",
+    "at": "/connectors/0/status"
+  },
+  "collector.v1/invalid/account-kind-guessed.json": {
+    "keyword": "enum",
+    "at": "/account/kind"
+  },
+  "collector.v1/invalid/routine-usage-left-out.json": {
+    "keyword": "required",
+    "at": "/routines/0"
   }
 }

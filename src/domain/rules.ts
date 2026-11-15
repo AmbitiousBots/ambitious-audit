@@ -1,5 +1,5 @@
 import { isRecord } from "@ambitious/kit/domain/json";
-import { olderThanDays, parseTimestamp } from "./time.ts";
+import { observedInstant, olderThanDays, parseTimestamp } from "./time.ts";
 import type { CollectorInput, Effort, EvidenceId, EvidenceIds, Fingerprint, RuleId, Severity } from "./types.ts";
 import { isEvidenceId, isFingerprint, isRecommendationId, isRuleId } from "./types.ts";
 
@@ -7,7 +7,7 @@ type CountText = { readonly one: string; readonly many: string };
 
 type RuleWhen =
   | { readonly kind: "routine-state"; readonly state: "paused" | "failing"; readonly olderThanDays?: number }
-  | { readonly kind: "connector-status"; readonly status: "needsAuth" }
+  | { readonly kind: "connector-status"; readonly status: "needsAuth" | "needsGrant" }
   | { readonly kind: "bot-unused"; readonly olderThanDays: number }
   | { readonly kind: "stale-tasks"; readonly moreThan: number }
   | { readonly kind: "duplicate-routines" };
@@ -17,6 +17,7 @@ export type RuleDefinition = {
   readonly severity: Severity;
   readonly effort: Effort;
   readonly rank: number;
+  readonly dependsOnRole: boolean;
   readonly title: string;
   readonly why: string;
   readonly summary: CountText;
@@ -26,6 +27,7 @@ export type RuleDefinition = {
 export type RuleHit = {
   readonly rule: RuleDefinition;
   readonly subjects: readonly string[];
+  readonly withheld: boolean;
   readonly evidenceIds: EvidenceIds;
   readonly summary: string;
   readonly fingerprint: Fingerprint;
@@ -59,8 +61,9 @@ const parseWhen = (value: unknown): RuleWhen => {
     return { kind: "routine-state", state, olderThanDays: wholeNumber(olderThanDays, "when.olderThanDays") };
   }
   if (kind === "connector-status") {
-    if (value.status !== "needsAuth") return brokenRule("when.status");
-    return { kind: "connector-status", status: "needsAuth" };
+    const status = value.status;
+    if (status !== "needsAuth" && status !== "needsGrant") return brokenRule("when.status");
+    return { kind: "connector-status", status };
   }
   if (kind === "bot-unused") return { kind: "bot-unused", olderThanDays: wholeNumber(value.olderThanDays, "when.olderThanDays") };
   if (kind === "stale-tasks") return { kind: "stale-tasks", moreThan: wholeNumber(value.moreThan, "when.moreThan") };
@@ -83,7 +86,9 @@ export const parseRule = (value: unknown): RuleDefinition => {
   if (typeof effort !== "string" || !isEffort(effort)) return brokenRule("effort");
   if (typeof title !== "string" || title.length < 1 || title.length > 120) return brokenRule("title");
   if (typeof why !== "string" || why.length < 1 || why.length > 600) return brokenRule("why");
-  return { id, severity, effort, rank: wholeNumber(value.rank, "rank"), title, why, summary: textPair(value.summary, "summary"), when: parseWhen(value.when) };
+  const dependsOnRole = value.dependsOnRole;
+  if (typeof dependsOnRole !== "boolean") return brokenRule("dependsOnRole");
+  return { id, severity, effort, rank: wholeNumber(value.rank, "rank"), dependsOnRole, title, why, summary: textPair(value.summary, "summary"), when: parseWhen(value.when) };
 };
 
 const referenceMs = (snapshot: CollectorInput): number => {
@@ -115,6 +120,7 @@ const hit = (rule: RuleDefinition, snapshot: CollectorInput, subjects: readonly 
   return {
     rule,
     subjects,
+    withheld: rule.dependsOnRole && snapshot.account.kind === "unknown",
     evidenceIds: evidenceFor(snapshot, evidenceKeys),
     summary: sentence(rule.summary, subjects.length),
     fingerprint: fingerprintFor(rule.id, subjects),
@@ -128,8 +134,7 @@ const subjectsOf = (rule: RuleDefinition, snapshot: CollectorInput): { readonly 
     const matched = snapshot.routines.filter((routine) => {
       if (routine.state !== when.state) return false;
       if (when.olderThanDays === undefined) return true;
-      const ran = routine.lastRunAt === null ? null : parseTimestamp(routine.lastRunAt);
-      return olderThanDays(collected, ran, when.olderThanDays);
+      return olderThanDays(collected, observedInstant(routine.lastRunAt), when.olderThanDays);
     });
     const subjects = matched.map((routine) => routine.id);
     return { subjects, evidenceKeys: subjects };
@@ -140,12 +145,13 @@ const subjectsOf = (rule: RuleDefinition, snapshot: CollectorInput): { readonly 
   }
   if (when.kind === "bot-unused") {
     const subjects = snapshot.bots
-      .filter((bot) => olderThanDays(collected, bot.lastActiveAt === null ? null : parseTimestamp(bot.lastActiveAt), when.olderThanDays))
+      .filter((bot) => olderThanDays(collected, observedInstant(bot.lastActiveAt), when.olderThanDays))
       .map((bot) => bot.id);
     return { subjects, evidenceKeys: subjects };
   }
   if (when.kind === "stale-tasks") {
-    return snapshot.tasks.stale7d > when.moreThan ? { subjects: ["tasks"], evidenceKeys: ["tasks"] } : { subjects: [], evidenceKeys: [] };
+    const stale = snapshot.tasks.stale7d;
+    return stale !== null && stale > when.moreThan ? { subjects: ["tasks"], evidenceKeys: ["tasks"] } : { subjects: [], evidenceKeys: [] };
   }
   const groups = new Map<string, string[]>();
   for (const routine of snapshot.routines) {

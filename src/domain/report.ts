@@ -11,20 +11,33 @@ import type {
   Recommendations,
   ReportEvidence,
   ReportId,
+  RuleId,
   SendReportPayload,
   Sha256Hex,
   VisibilityMap,
+  VisibilitySignal,
 } from "./types.ts";
-import { isEvidenceId, isRecommendationId, isSemVer, WIRE_LIMITS } from "./types.ts";
+import { isEvidenceId, isRecommendationId, isRuleId, isSemVer, WIRE_LIMITS } from "./types.ts";
 import { entropyHex, reportIdFrom } from "./uuid.ts";
 
 const SEVERITY_ORDER = { high: 0, medium: 1, low: 2 } as const;
 
-const SIGNAL_WHY: Readonly<Record<VisibilityMap[number]["signal"], string>> = {
-  transcripts: "transcripts",
-  usage: "usage",
-  otherBots: "other bots",
-  auditLog: "the audit log",
+const SIGNALS: Readonly<Record<VisibilitySignal, { readonly id: string; readonly name: string }>> = {
+  transcripts: { id: "visibility-transcripts", name: "conversation text" },
+  usage: { id: "visibility-usage", name: "usage by bot and by routine" },
+  otherBots: { id: "visibility-other-bots", name: "other bots" },
+  auditLog: { id: "visibility-audit-log", name: "the audit log" },
+  accountRole: { id: "visibility-account-role", name: "the account role" },
+  tasks: { id: "visibility-tasks", name: "task counts" },
+  pages: { id: "visibility-pages", name: "page counts" },
+  botActivity: { id: "visibility-bot-activity", name: "when each bot was last active" },
+  routines: { id: "visibility-routines", name: "routine counts and run times" },
+};
+
+const visibilityRuleId = (signal: VisibilitySignal): RuleId => {
+  const id = SIGNALS[signal].id;
+  if (!isRuleId(id)) throw new Error(`The visibility finding id for ${signal} is not a rule id.`);
+  return id;
 };
 
 export type RankedRecommendation = { readonly recommendation: Recommendation; readonly fingerprint: RuleHit["fingerprint"] };
@@ -48,15 +61,38 @@ export const capRecommendations = (items: readonly Recommendation[]): Recommenda
 const orderedHits = (hits: readonly RuleHit[]): readonly RuleHit[] =>
   [...hits].sort((left, right) => SEVERITY_ORDER[left.rule.severity] - SEVERITY_ORDER[right.rule.severity] || left.rule.rank - right.rule.rank || (left.rule.id < right.rule.id ? -1 : 1));
 
-export const findingsFrom = (hits: readonly RuleHit[]): readonly Finding[] =>
+export const ruleFinding = (item: RuleHit): Finding => ({
+  kind: "rule",
+  ruleId: item.rule.id,
+  severity: item.rule.severity,
+  evidenceIds: item.evidenceIds,
+  summary: item.summary,
+  ...(item.withheld ? { withheld: "roleUnknown" as const } : {}),
+});
+
+const visibilityFindings = (visibility: VisibilityMap): readonly Finding[] =>
+  visibility
+    .filter((entry) => !entry.seen)
+    .map((entry) => ({
+      kind: "visibility" as const,
+      ruleId: visibilityRuleId(entry.signal),
+      severity: "low" as const,
+      evidenceIds: [],
+      summary: `Not observed: ${SIGNALS[entry.signal].name}. Findings cover only what the bot could see.`,
+    }));
+
+export const findingsFrom = (snapshot: CollectorInput, hits: readonly RuleHit[]): readonly Finding[] =>
+  [...orderedHits(hits).map(ruleFinding), ...visibilityFindings(visibilityOf(snapshot))].slice(0, 20);
+
+export const withheldRules = (hits: readonly RuleHit[]): readonly RuleId[] =>
   orderedHits(hits)
-    .slice(0, 20)
-    .map((item) => ({ ruleId: item.rule.id, severity: item.rule.severity, evidenceIds: item.evidenceIds, summary: item.summary }));
+    .filter((item) => item.withheld)
+    .map((item) => item.rule.id);
 
 export const recommendationsFrom = (hits: readonly RuleHit[], suppressed: ReadonlySet<string>): readonly RankedRecommendation[] => {
   const ranked: RankedRecommendation[] = [];
   for (const item of orderedHits(hits)) {
-    if (suppressed.has(item.fingerprint)) continue;
+    if (item.withheld || suppressed.has(item.fingerprint)) continue;
     const evidenceIds = cited(item.evidenceIds);
     if (evidenceIds === null || !isRecommendationId(item.rule.id)) continue;
     ranked.push({
@@ -67,11 +103,15 @@ export const recommendationsFrom = (hits: readonly RuleHit[], suppressed: Readon
   return ranked.slice(0, WIRE_LIMITS.recommendations);
 };
 
-const summaryOf = (findings: readonly Finding[], visibility: VisibilityMap): string => {
-  const unseen = visibility.filter((entry) => !entry.seen).map((entry) => SIGNAL_WHY[entry.signal]);
-  const body = findings.length === 0 ? "Nothing in this snapshot needs action." : findings.map((finding) => finding.summary).join(" ");
-  const tail = unseen.length === 0 ? "Every listed signal was visible." : `Not visible: ${unseen.join(", ")}.`;
-  const summary = `${body} ${tail}`;
+const summaryOf = (findings: readonly Finding[], visibility: VisibilityMap, withheld: number): string => {
+  const unseen = visibility.filter((entry) => !entry.seen).map((entry) => SIGNALS[entry.signal].name);
+  const fromRules = findings.filter((finding) => finding.kind === "rule");
+  const body = fromRules.length === 0 ? "No rule matched what the bot could observe." : fromRules.map((finding) => finding.summary).join(" ");
+  const role = visibility.some((entry) => entry.signal === "accountRole" && !entry.seen)
+    ? ` The account role is unknown, so recommendations that depend on it are withheld (${withheld} in this report).`
+    : "";
+  const tail = unseen.length === 0 ? "Every listed signal was visible." : `Not observed: ${unseen.join(", ")}.`;
+  const summary = `${body}${role} ${tail}`;
   return summary.length <= WIRE_LIMITS.summaryCharacters ? summary : `${summary.slice(0, WIRE_LIMITS.summaryCharacters - 1)}…`;
 };
 
@@ -81,7 +121,7 @@ const evidenceOf = (snapshot: CollectorInput, findings: readonly Finding[], reco
   const byId = new Map<string, ReportEvidence>();
   for (const item of snapshot.evidence) {
     if (!wanted.has(item.id) || !isEvidenceId(item.id) || byId.has(item.id)) continue;
-    byId.set(item.id, { id: item.id, text: item.text });
+    byId.set(item.id, { id: item.id, text: item.text, source: item.source });
   }
   const rows: ReportEvidence[] = [];
   for (const id of cited) {
@@ -106,6 +146,8 @@ const countsOf = (snapshot: CollectorInput): SendReportPayload["counts"] => ({
   connectors: {
     ok: snapshot.connectors.filter((connector) => connector.status === "ok").length,
     needsAuth: snapshot.connectors.filter((connector) => connector.status === "needsAuth").length,
+    needsGrant: snapshot.connectors.filter((connector) => connector.status === "needsGrant").length,
+    initializing: snapshot.connectors.filter((connector) => connector.status === "initializing").length,
     error: snapshot.connectors.filter((connector) => connector.status === "error").length,
   },
   tasks: { open: snapshot.tasks.open, stale7d: snapshot.tasks.stale7d, blocked: snapshot.tasks.blocked },
@@ -125,15 +167,16 @@ export const assembleReport = (
   if (!isSemVer(version)) throw new Error("The module version is not a semantic version.");
   const collected = parseTimestamp(snapshot.collectedAt);
   if (collected === null) throw new Error("The snapshot collectedAt is not a UTC timestamp.");
-  const findings = findingsFrom(hits);
+  const findings = findingsFrom(snapshot, hits);
   const ranked = recommendationsFrom(hits, suppressed);
   const recommendations = capRecommendations(ranked.map((item) => item.recommendation));
   const visibility = visibilityOf(snapshot);
   const payload: SendReportPayload = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     reportId,
     period: { from: formatTimestamp(addDays(collected, -7)), to: formatTimestamp(collected) },
-    summary: summaryOf(findings, visibility),
+    accountKind: snapshot.account.kind,
+    summary: summaryOf(findings, visibility, withheldRules(hits).length),
     counts: countsOf(snapshot),
     findings,
     recommendations,

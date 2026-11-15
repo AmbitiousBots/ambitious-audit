@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:ambitious:audit:schema:collector:v1",
   "title": "Collector input, version 1",
-  "description": "What a bot gathered about its own account with its own tools, as input to the snapshot command. Every text field is short and bounded, so the file cannot carry a full conversation transcript.",
+  "description": "What a bot gathered about its own account with its own tools, as input to the snapshot command. A value the bot could not observe is written as null, never as zero and never as a guess. Each group of values that holds a null must be matched by the visibility entry for that group with seen set to false: account.kind unknown by accountRole, a null in tasks by tasks, a null in pages by pages, a null lastActiveAt by botActivity, a null routineCount or lastRunAt by routines, and a null usage by usage. The snapshot command rejects a document that breaks this, and the report shows every entry whose seen is false. Every text field is short and bounded, so the file cannot carry a full conversation transcript.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -37,9 +37,10 @@
           "enum": [
             "owner",
             "guest",
-            "team"
+            "team",
+            "unknown"
           ],
-          "description": "How the bot is attached to the account."
+          "description": "How the bot is attached to the account. Use unknown when no tool reported the role and the account holder has not stated it. Never infer the role from what the bot can or cannot see. With unknown, the audit runs in partial-visibility mode: recommendations that depend on the role are withheld, their findings are marked, and the report states that the role is unknown."
         },
         "label": {
           "type": "string",
@@ -75,7 +76,7 @@
     },
     "tasks": {
       "type": "object",
-      "description": "Task counts.",
+      "description": "Task counts. They come from the output of the ambitious-tasks module, which keeps the bot's task list. When that module is not installed, or its output was not read, every count is null. Never estimate a count.",
       "additionalProperties": false,
       "required": [
         "open",
@@ -84,28 +85,37 @@
       ],
       "properties": {
         "open": {
-          "type": "integer",
+          "type": [
+            "integer",
+            "null"
+          ],
           "minimum": 0,
           "maximum": 1000000,
-          "description": "Open tasks."
+          "description": "Open tasks, or null when not observed."
         },
         "stale7d": {
-          "type": "integer",
+          "type": [
+            "integer",
+            "null"
+          ],
           "minimum": 0,
           "maximum": 1000000,
-          "description": "Open tasks with no change in 7 days."
+          "description": "Open tasks with no change in 7 days, or null when not observed."
         },
         "blocked": {
-          "type": "integer",
+          "type": [
+            "integer",
+            "null"
+          ],
           "minimum": 0,
           "maximum": 1000000,
-          "description": "Blocked tasks."
+          "description": "Blocked tasks, or null when not observed."
         }
       }
     },
     "pages": {
       "type": "object",
-      "description": "Page counts.",
+      "description": "Page counts. A count the bot could not read is null.",
       "additionalProperties": false,
       "required": [
         "count",
@@ -113,16 +123,22 @@
       ],
       "properties": {
         "count": {
-          "type": "integer",
+          "type": [
+            "integer",
+            "null"
+          ],
           "minimum": 0,
           "maximum": 1000000,
-          "description": "Pages in the account."
+          "description": "Pages in the account, or null when not observed."
         },
         "updated7d": {
-          "type": "integer",
+          "type": [
+            "integer",
+            "null"
+          ],
           "minimum": 0,
           "maximum": 1000000,
-          "description": "Pages updated in the last 7 days."
+          "description": "Pages updated in the last 7 days, or null when not observed."
         }
       }
     },
@@ -145,11 +161,47 @@
       "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]{1,3})?Z$",
       "description": "An instant in UTC, written as YYYY-MM-DDTHH:MM:SSZ with optional milliseconds."
     },
+    "lastSeen": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 24,
+      "pattern": "^(never|[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]{1,3})?Z)$",
+      "description": "An instant in UTC written as YYYY-MM-DDTHH:MM:SSZ with optional milliseconds, the word never when the account shows it has not happened yet, or null when the bot could not observe it."
+    },
     "id": {
       "type": "string",
       "minLength": 1,
       "maxLength": 128,
       "description": "An identifier as the account shows it."
+    },
+    "usage": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "unit",
+        "amount7d"
+      ],
+      "description": "Usage over the 7 days before collectedAt, or null when it was not observed. The visibility signal usage counts as seen only when usage was observed for that period for every listed bot and every listed routine, in either unit.",
+      "properties": {
+        "unit": {
+          "enum": [
+            "credits",
+            "percent"
+          ],
+          "description": "credits when the account reports credits used; percent when it reports a share of the account's total usage."
+        },
+        "amount7d": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000000000,
+          "description": "Credits used, or the percentage share from 0 to 100, in the last 7 days."
+        }
+      }
     },
     "bot": {
       "type": "object",
@@ -173,38 +225,19 @@
           "description": "The bot's display name."
         },
         "lastActiveAt": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "maxLength": 24,
-          "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]{1,3})?Z$",
-          "description": "When the bot was last active, or null if it has never been active."
+          "$ref": "#/$defs/lastSeen"
         },
         "routineCount": {
-          "type": "integer",
+          "type": [
+            "integer",
+            "null"
+          ],
           "minimum": 0,
           "maximum": 100000,
-          "description": "How many routines the bot has."
+          "description": "How many routines the bot has, or null when not observed."
         },
         "usage": {
-          "type": "object",
-          "description": "Usage figures for the bot.",
-          "additionalProperties": false,
-          "required": [
-            "credits7d"
-          ],
-          "properties": {
-            "credits7d": {
-              "type": [
-                "number",
-                "null"
-              ],
-              "minimum": 0,
-              "maximum": 1000000000,
-              "description": "Credits used in the last 7 days, or null when usage could not be seen."
-            }
-          }
+          "$ref": "#/$defs/usage"
         }
       }
     },
@@ -217,7 +250,8 @@
         "botId",
         "schedule",
         "state",
-        "lastRunAt"
+        "lastRunAt",
+        "usage"
       ],
       "properties": {
         "id": {
@@ -241,13 +275,10 @@
           "description": "The routine's current state."
         },
         "lastRunAt": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "maxLength": 24,
-          "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]{1,3})?Z$",
-          "description": "When the routine last ran, or null if it has never run."
+          "$ref": "#/$defs/lastSeen"
+        },
+        "usage": {
+          "$ref": "#/$defs/usage"
         },
         "lastError": {
           "type": "string",
@@ -276,9 +307,11 @@
           "enum": [
             "ok",
             "needsAuth",
+            "needsGrant",
+            "initializing",
             "error"
           ],
-          "description": "The connector's current status."
+          "description": "The connector's current status: ok (working), needsAuth (it must be signed in again), needsGrant (it is connected, but this bot has not been given access to it), initializing (still being set up), error (failing for another reason)."
         }
       }
     },
@@ -297,13 +330,18 @@
             "transcripts",
             "usage",
             "otherBots",
-            "auditLog"
+            "auditLog",
+            "accountRole",
+            "tasks",
+            "pages",
+            "botActivity",
+            "routines"
           ],
-          "description": "The kind of information this entry is about."
+          "description": "The kind of information this entry is about: transcripts (conversation text), usage (usage figures for bots and routines), otherBots (bots other than the one collecting), auditLog (the account's audit log), accountRole (how the bot is attached to the account), tasks (task counts), pages (page counts), botActivity (when each bot was last active), routines (each bot's routine count and when each routine last ran)."
         },
         "seen": {
           "type": "boolean",
-          "description": "Whether the bot could read this kind of information."
+          "description": "Whether the bot could read this kind of information. It must be false when the group of values it covers holds a null."
         },
         "why": {
           "type": "string",
@@ -316,8 +354,8 @@
     "visibility": {
       "type": "array",
       "description": "The visibility map: exactly one entry for each signal, so nothing unseen is left out.",
-      "minItems": 4,
-      "maxItems": 4,
+      "minItems": 9,
+      "maxItems": 9,
       "items": {
         "$ref": "#/$defs/visibilityEntry"
       },
@@ -373,6 +411,71 @@
               }
             }
           }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "signal"
+            ],
+            "properties": {
+              "signal": {
+                "const": "accountRole"
+              }
+            }
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "signal"
+            ],
+            "properties": {
+              "signal": {
+                "const": "tasks"
+              }
+            }
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "signal"
+            ],
+            "properties": {
+              "signal": {
+                "const": "pages"
+              }
+            }
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "signal"
+            ],
+            "properties": {
+              "signal": {
+                "const": "botActivity"
+              }
+            }
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "signal"
+            ],
+            "properties": {
+              "signal": {
+                "const": "routines"
+              }
+            }
+          }
         }
       ]
     },
@@ -407,7 +510,7 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 128,
-          "description": "The bot id or tool the evidence came from."
+          "description": "The bot id, routine id, connector name or tool the evidence came from. Use tasks for evidence about task counts. A rule cites evidence whose source equals the thing it is about."
         }
       }
     },

@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "collectedAt": "2026-11-15T00:00:00Z",
+  "account": {
+    "kind": "unknown",
+    "label": "Workspace"
+  },
+  "bots": [
+    {
+      "id": "bot-1",
+      "name": "Helper",
+      "lastActiveAt": null,
+      "routineCount": null,
+      "usage": null
+    }
+  ],
+  "routines": [
+    {
+      "id": "routine-1",
+      "botId": "bot-1",
+      "schedule": "every day at 08:00",
+      "state": "active",
+      "lastRunAt": null,
+      "usage": null
+    }
+  ],
+  "connectors": [],
+  "tasks": {
+    "open": null,
+    "stale7d": null,
+    "blocked": null
+  },
+  "pages": {
+    "count": null,
+    "updated7d": null
+  },
+  "visibility": [
+    {
+      "signal": "transcripts",
+      "seen": false,
+      "why": "The bot has no tool that reads conversations."
+    },
+    {
+      "signal": "usage",
+      "seen": false,
+      "why": "No tool reported usage for the last 7 days."
+    },
+    {
+      "signal": "otherBots",
+      "seen": false,
+      "why": "The bot list tool returned only this bot."
+    },
+    {
+      "signal": "auditLog",
+      "seen": false,
+      "why": "The account does not share its audit log."
+    },
+    {
+      "signal": "accountRole",
+      "seen": false,
+      "why": "No tool reports the role, and the account holder has not said."
+    },
+    {
+      "signal": "tasks",
+      "seen": false,
+      "why": "The task module is not installed."
+    },
+    {
+      "signal": "pages",
+      "seen": false,
+      "why": "The page list tool was not available."
+    },
+    {
+      "signal": "botActivity",
+      "seen": false,
+      "why": "The bot list does not show when a bot was last active."
+    },
+    {
+      "signal": "routines",
+      "seen": false,
+      "why": "The routine list does not show run times or per-bot counts."
+    }
+  ],
+  "evidence": []
+}

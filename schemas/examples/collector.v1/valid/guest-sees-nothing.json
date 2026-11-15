@@ -9,13 +9,13 @@
   "routines": [],
   "connectors": [],
   "tasks": {
-    "open": 0,
-    "stale7d": 0,
-    "blocked": 0
+    "open": null,
+    "stale7d": null,
+    "blocked": null
   },
   "pages": {
-    "count": 0,
-    "updated7d": 0
+    "count": null,
+    "updated7d": null
   },
   "visibility": [
     {
@@ -35,6 +35,31 @@
     },
     {
       "signal": "auditLog",
+      "seen": false,
+      "why": "Guests cannot see this."
+    },
+    {
+      "signal": "accountRole",
+      "seen": true,
+      "why": "The account holder said this bot is a guest."
+    },
+    {
+      "signal": "tasks",
+      "seen": false,
+      "why": "Guests cannot see this."
+    },
+    {
+      "signal": "pages",
+      "seen": false,
+      "why": "Guests cannot see this."
+    },
+    {
+      "signal": "botActivity",
+      "seen": false,
+      "why": "Guests cannot see this."
+    },
+    {
+      "signal": "routines",
       "seen": false,
       "why": "Guests cannot see this."
     }

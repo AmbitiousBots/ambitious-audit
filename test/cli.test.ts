@@ -10,7 +10,7 @@ import { isRecord } from "@ambitious/kit/domain/json";
 
 const binary = join(import.meta.dirname, "..", "dist", "ambitious-audit.mjs");
 const owner = readFileSync(join(import.meta.dirname, "fixtures", "owner.json"), "utf8");
-const reportSchema = JSON.parse(readFileSync(join(import.meta.dirname, "..", "schemas", "send_report.v1.json"), "utf8"));
+const reportSchema = JSON.parse(readFileSync(join(import.meta.dirname, "..", "schemas", "send_report.v2.json"), "utf8"));
 const ajv = new Ajv2020({ allErrors: true, strict: true });
 const validateReport = ajv.compile(reportSchema);
 
@@ -22,14 +22,17 @@ const freshHome = (t: TestContext): string => {
   return home;
 };
 
-const run = (home: string, args: readonly string[], input = ""): { readonly exit: number | null; readonly data: unknown; readonly stdout: string } => {
+type Ran = { readonly exit: number | null; readonly data: unknown; readonly errors: readonly unknown[]; readonly stdout: string };
+
+const run = (home: string, args: readonly string[], input = ""): Ran => {
   const result = spawnSync(process.execPath, [binary, ...args, "--now", "2026-11-15T00:00:00Z", "--seed", "1"], {
     encoding: "utf8",
     input,
     env: { ...process.env, AMBITIOUS_HOME: home },
   });
   const parsed: unknown = JSON.parse(result.stdout);
-  return { exit: result.status, data: isRecord(parsed) ? parsed.data : undefined, stdout: result.stdout };
+  const errors = isRecord(parsed) && Array.isArray(parsed.errors) ? parsed.errors : [];
+  return { exit: result.status, data: isRecord(parsed) ? parsed.data : undefined, errors, stdout: result.stdout };
 };
 
 const dataOf = (value: unknown): Readonly<Record<string, unknown>> => {
@@ -129,4 +132,191 @@ test("rebuilding a built report can ask for a review and refuses any other misma
   const afterReview = run(home, ["report", "build"], JSON.stringify({ snapshotId, reviewRequired: false }));
   assert.equal(afterReview.exit, 1);
   assert.match(afterReview.stdout, /"code":"E_REVIEW_REQUIRED"/);
+});
+
+const fixture = (name: string): string => readFileSync(join(import.meta.dirname, "fixtures", name), "utf8");
+
+const changed = (text: string, change: (document: Record<string, unknown>) => void): string => {
+  const document: unknown = JSON.parse(text);
+  if (!isRecord(document)) throw new Error("fixture");
+  const copy = { ...document };
+  change(copy);
+  return JSON.stringify(copy);
+};
+
+const errorTexts = (ran: Ran): readonly { readonly code: unknown; readonly message: string; readonly hint: string }[] =>
+  ran.errors.flatMap((entry) => (isRecord(entry) && typeof entry.message === "string" && typeof entry.hint === "string" ? [{ code: entry.code, message: entry.message, hint: entry.hint }] : []));
+
+const listOf = (value: unknown): readonly Readonly<Record<string, unknown>>[] => (Array.isArray(value) ? value.filter(isRecord) : []);
+
+test("a collector that observed nothing yields only visibility findings and no recommendation", (t) => {
+  const home = freshHome(t);
+  const stored = run(home, ["snapshot"], fixture("nothing-observed.json"));
+  assert.equal(stored.exit, 0, stored.stdout);
+  const snapshotId = dataOf(stored.data).snapshotId;
+  const found = dataOf(run(home, ["findings"], JSON.stringify({ snapshotId })).data);
+  assert.equal(found.mode, "partial");
+  const findings = listOf(found.findings);
+  assert.equal(findings.length, 9);
+  assert.deepEqual([...new Set(findings.map((finding) => finding.kind))], ["visibility"]);
+  const recommended = dataOf(run(home, ["recommend"], JSON.stringify({ snapshotId })).data);
+  assert.deepEqual(recommended.recommendations, []);
+  assert.deepEqual(recommended.withheld, []);
+
+  const built = run(home, ["report", "build"], JSON.stringify({ snapshotId, reviewRequired: true }));
+  assert.equal(built.exit, 0, built.stdout);
+  const payload = dataOf(dataOf(built.data).payload);
+  assert.equal(validateReport(payload), true);
+  assert.equal(payload.accountKind, "unknown");
+  assert.deepEqual(dataOf(payload.counts).tasks, { open: null, stale7d: null, blocked: null });
+  assert.deepEqual(dataOf(payload.counts).pages, { count: null, updated7d: null });
+  assert.match(String(payload.summary), /The account role is unknown/);
+  assert.match(String(payload.summary), /Not observed: .*task counts.*page counts/);
+});
+
+test("a partly observed account with an unknown role gets findings for what was seen and withholds role-dependent recommendations", (t) => {
+  const home = freshHome(t);
+  const stored = run(home, ["snapshot"], fixture("partial.json"));
+  assert.equal(stored.exit, 0, stored.stdout);
+  const snapshotId = dataOf(stored.data).snapshotId;
+  const findings = listOf(dataOf(run(home, ["findings"], JSON.stringify({ snapshotId })).data).findings);
+  const fromRules = findings.filter((finding) => finding.kind === "rule");
+  assert.deepEqual(fromRules.map((finding) => finding.ruleId), ["failing-routine", "connector-needs-auth", "connector-needs-grant", "stale-tasks"]);
+  assert.deepEqual(fromRules.map((finding) => finding.withheld), ["roleUnknown", "roleUnknown", "roleUnknown", undefined]);
+  assert.deepEqual(
+    findings.filter((finding) => finding.kind === "visibility").map((finding) => finding.ruleId),
+    ["visibility-transcripts", "visibility-usage", "visibility-audit-log", "visibility-account-role", "visibility-pages", "visibility-bot-activity"],
+  );
+
+  const recommended = dataOf(run(home, ["recommend"], JSON.stringify({ snapshotId })).data);
+  assert.equal(recommended.mode, "partial");
+  assert.deepEqual(listOf(recommended.recommendations).map((item) => item.id), ["stale-tasks"]);
+  assert.deepEqual(recommended.withheld, ["failing-routine", "connector-needs-auth", "connector-needs-grant"]);
+
+  const payload = dataOf(dataOf(run(home, ["report", "build"], JSON.stringify({ snapshotId, reviewRequired: false })).data).payload);
+  assert.equal(validateReport(payload), true);
+  assert.deepEqual(dataOf(payload.counts).connectors, { ok: 0, needsAuth: 1, needsGrant: 1, initializing: 1, error: 0 });
+  assert.deepEqual(dataOf(payload.counts).tasks, { open: 14, stale7d: 3, blocked: 1 });
+  assert.deepEqual(dataOf(payload.counts).pages, { count: null, updated7d: null });
+  assert.ok(listOf(payload.evidence).some((item) => item.id === "ev-2" && item.source === "tasks"));
+});
+
+test("when the role is known the same account gets its role-dependent recommendations", (t) => {
+  const home = freshHome(t);
+  const known = changed(fixture("partial.json"), (document) => {
+    document.account = { kind: "owner", label: "Main workspace" };
+    document.visibility = listOf(document.visibility).map((entry) => (entry.signal === "accountRole" ? { ...entry, seen: true, why: "The account holder said so." } : entry));
+  });
+  const snapshotId = dataOf(run(home, ["snapshot"], known).data).snapshotId;
+  const recommended = dataOf(run(home, ["recommend"], JSON.stringify({ snapshotId })).data);
+  assert.equal(recommended.mode, "full");
+  assert.deepEqual(recommended.withheld, []);
+  assert.deepEqual(listOf(recommended.recommendations).map((item) => item.id), ["failing-routine", "connector-needs-grant", "stale-tasks"]);
+});
+
+test("a refused collector names each failing field as a JSON pointer with the rule it broke", (t) => {
+  const home = freshHome(t);
+  const wrongTypes = run(
+    home,
+    ["snapshot"],
+    changed(owner, (document) => {
+      document.tasks = { open: "none", stale7d: 3 };
+      document.transcript = "all of it";
+    }),
+  );
+  assert.equal(wrongTypes.exit, 1);
+  const texts = errorTexts(wrongTypes);
+  assert.ok(texts.every((entry) => entry.code === "E_INPUT_SCHEMA"));
+  assert.ok(texts.some((entry) => entry.message.includes("field /tasks/open must be integer or null (rule: type)")), wrongTypes.stdout);
+  assert.ok(texts.some((entry) => entry.message.includes("field /tasks/blocked is required and is missing (rule: required)")), wrongTypes.stdout);
+  assert.ok(texts.some((entry) => entry.message.includes("field /transcript is not a field of this input (rule: additionalProperties)")), wrongTypes.stdout);
+  assert.ok(texts.every((entry) => entry.hint.includes('ambitious-audit schema snapshot')));
+  assert.ok(texts.some((entry) => entry.hint.includes("null when not observed")), wrongTypes.stdout);
+
+  const short = run(
+    home,
+    ["snapshot"],
+    changed(owner, (document) => {
+      document.visibility = listOf(document.visibility).filter((entry) => entry.signal !== "tasks");
+    }),
+  );
+  assert.deepEqual(
+    errorTexts(short).map((entry) => entry.message),
+    ['The input field /visibility must have one entry whose signal is "tasks" (rule: contains).', "The input field /visibility must NOT have fewer than 9 items (rule: minItems)."],
+  );
+
+  const legacy = run(
+    home,
+    ["snapshot"],
+    changed(owner, (document) => {
+      document.bots = [{ id: "bot-1", name: "Helper", lastActiveAt: null, routineCount: 0, usage: { credits7d: 1 } }];
+    }),
+  );
+  assert.ok(errorTexts(legacy).some((entry) => entry.message.includes("/bots/0/usage/credits7d")), legacy.stdout);
+
+  assert.equal(run(home, ["snapshot"], owner).exit, 0);
+  const badId = run(home, ["findings"], JSON.stringify({ snapshotId: "not-an-id" }));
+  assert.equal(badId.exit, 1);
+  assert.ok(errorTexts(badId).some((entry) => entry.message.includes("field /snapshotId") && entry.message.includes("rule: pattern") && entry.hint.includes("schema findings")), badId.stdout);
+  const badMark = run(home, ["report", "mark"], JSON.stringify({ reportId: "018f0000-0000-7000-8000-000000000001", state: "done", at: "2026-11-15T00:00:00Z" }));
+  assert.ok(errorTexts(badMark).some((entry) => entry.message.includes('field /state must be one of "reviewed", "sent", "acked", "failed" (rule: enum)')), badMark.stdout);
+});
+
+test("a null needs its visibility gap, and a role nobody saw must be unknown", (t) => {
+  const home = freshHome(t);
+  const zeroless = run(
+    home,
+    ["snapshot"],
+    changed(owner, (document) => {
+      document.tasks = { open: null, stale7d: null, blocked: null };
+    }),
+  );
+  assert.equal(zeroless.exit, 1);
+  const gap = errorTexts(zeroless)[0];
+  assert.match(gap?.message ?? "", /field \/visibility\/5\/seen must be false, because \/tasks\/open is null, which means not observed \(rule: null-needs-visibility-gap\)/);
+  assert.match(gap?.hint ?? "", /Never write zero or a guess/);
+
+  const inferred = run(
+    home,
+    ["snapshot"],
+    changed(owner, (document) => {
+      document.visibility = listOf(document.visibility).map((entry) => (entry.signal === "accountRole" ? { ...entry, seen: false, why: "No tool reports it." } : entry));
+    }),
+  );
+  assert.equal(inferred.exit, 1);
+  assert.match(errorTexts(inferred)[0]?.message ?? "", /field \/account\/kind must be "unknown".*\(rule: role-needs-a-source\)/);
+
+  const share = run(
+    home,
+    ["snapshot"],
+    changed(owner, (document) => {
+      document.bots = [{ id: "bot-1", name: "Helper", lastActiveAt: "never", routineCount: 0, usage: { unit: "percent", amount7d: 140 } }];
+    }),
+  );
+  assert.match(errorTexts(share)[0]?.message ?? "", /field \/bots\/0\/usage\/amount7d must be 100 or less when unit is percent \(rule: percent-range\)/);
+});
+
+test("schema prints the collector schema, and schema with a command name prints that command's input schema", (t) => {
+  const home = freshHome(t);
+  const collector: unknown = JSON.parse(readFileSync(join(import.meta.dirname, "..", "schemas", "collector.v1.json"), "utf8"));
+  const printed = dataOf(run(home, ["schema"]).data);
+  assert.deepEqual(printed.schema, collector);
+  assert.equal(printed.input, "snapshot");
+  const names = Array.isArray(printed.commands) ? printed.commands.filter((name) => typeof name === "string") : [];
+  assert.deepEqual(names, ["snapshot", "baseline set", "diff", "findings", "recommend", "report build", "report mark", "feedback build"]);
+  const listed = listOf(dataOf(run(home, ["commands"]).data).commands);
+  assert.deepEqual(
+    listed.filter((entry) => entry.input === true).map((entry) => entry.name).sort(),
+    [...names].sort(),
+  );
+  for (const name of names) {
+    const ran = run(home, ["schema", ...name.split(" ")]);
+    assert.equal(ran.exit, 0, name);
+    const schema = dataOf(dataOf(ran.data).schema);
+    assert.equal(schema.type, "object");
+    assert.equal(schema.additionalProperties, false);
+    const example = new Ajv2020({ allErrors: true, strict: true }).compile(schema);
+    assert.equal(example({}), false, name);
+  }
+  assert.equal(run(home, ["schema", "nothing"]).exit, 1);
 });

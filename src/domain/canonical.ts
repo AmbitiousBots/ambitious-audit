@@ -1,21 +1,21 @@
-import { failure } from "@ambitious/kit/domain/failure";
 import { isRecord } from "@ambitious/kit/domain/json";
-import type { CollectorInput, VisibilityEntry, VisibilityMap, VisibilitySignal } from "./types.ts";
-import type { CollectorV1Bot, CollectorV1Connector, CollectorV1Evidence, CollectorV1Routine } from "./wire.generated.ts";
-
-const SIGNAL_ORDER: readonly VisibilitySignal[] = ["transcripts", "usage", "otherBots", "auditLog"];
+import { pointerOf, refuseProblems, type FieldProblem } from "./field-problems.ts";
+import { VISIBILITY_SIGNALS, type CollectorInput, type VisibilityEntry, type VisibilityMap, type VisibilitySignal } from "./types.ts";
+import type { CollectorV1Bot, CollectorV1Connector, CollectorV1Evidence, CollectorV1Routine, CollectorV1Usage } from "./wire.generated.ts";
 
 const compareText = (left: string, right: string): number => (left < right ? -1 : left > right ? 1 : 0);
 
-const unique = (values: readonly string[], label: string): void => {
+const repeats = (values: readonly string[], pointer: (index: number) => string, label: string): readonly FieldProblem[] => {
   const seen = new Set<string>();
-  for (const value of values) {
-    if (seen.has(value)) {
-      throw failure("E_INPUT_SCHEMA", `The ${label} "${value}" is repeated.`, `Give every ${label} its own value.`);
-    }
+  const problems: FieldProblem[] = [];
+  values.forEach((value, index) => {
+    if (seen.has(value)) problems.push({ pointer: pointer(index), rule: "unique", must: `repeats the ${label} "${value}"`, help: `Give every ${label} its own value.` });
     seen.add(value);
-  }
+  });
+  return problems;
 };
+
+const copyUsage = (usage: CollectorV1Usage): CollectorV1Usage => (usage === null ? null : { unit: usage.unit, amount7d: usage.amount7d });
 
 const copyRoutine = (routine: CollectorV1Routine): CollectorV1Routine => ({
   id: routine.id,
@@ -23,6 +23,7 @@ const copyRoutine = (routine: CollectorV1Routine): CollectorV1Routine => ({
   schedule: routine.schedule,
   state: routine.state,
   lastRunAt: routine.lastRunAt,
+  usage: copyUsage(routine.usage),
   ...(routine.lastError === undefined ? {} : { lastError: routine.lastError }),
 });
 
@@ -35,27 +36,77 @@ export const canonicalJson = (value: unknown): string => {
   return JSON.stringify(ordered(value));
 };
 
-export const visibilityOf = (input: CollectorInput): VisibilityMap => {
-  const ordered = SIGNAL_ORDER.map((signal) => input.visibility.find((entry) => entry.signal === signal));
-  const at = (index: number): VisibilityEntry => {
-    const entry = ordered[index];
-    if (entry === undefined) {
-      throw failure("E_INPUT_SCHEMA", "Visibility must list every signal once.", "Add the missing signal and say whether it was seen and why.");
-    }
-    return entry;
+export const visibilityOf = (input: CollectorInput): VisibilityMap =>
+  VISIBILITY_SIGNALS.flatMap((signal) => input.visibility.filter((entry) => entry.signal === signal).slice(0, 1)).map(
+    (entry): VisibilityEntry => ({ signal: entry.signal, seen: entry.seen, why: entry.why }),
+  );
+
+export const notObserved = (input: CollectorInput): Readonly<Record<Exclude<VisibilitySignal, "transcripts" | "otherBots" | "auditLog">, readonly string[]>> => {
+  const where = (found: readonly (string | null)[]): readonly string[] => found.flatMap((pointer) => (pointer === null ? [] : [pointer]));
+  const nullAt = (value: unknown, ...parts: readonly (string | number)[]): string | null => (value === null ? pointerOf(parts) : null);
+  return {
+    accountRole: where([input.account.kind === "unknown" ? "/account/kind" : null]),
+    tasks: where([nullAt(input.tasks.open, "tasks", "open"), nullAt(input.tasks.stale7d, "tasks", "stale7d"), nullAt(input.tasks.blocked, "tasks", "blocked")]),
+    pages: where([nullAt(input.pages.count, "pages", "count"), nullAt(input.pages.updated7d, "pages", "updated7d")]),
+    botActivity: where(input.bots.map((bot, index) => nullAt(bot.lastActiveAt, "bots", index, "lastActiveAt"))),
+    routines: where([
+      ...input.bots.map((bot, index) => nullAt(bot.routineCount, "bots", index, "routineCount")),
+      ...input.routines.map((routine, index) => nullAt(routine.lastRunAt, "routines", index, "lastRunAt")),
+    ]),
+    usage: where([
+      ...input.bots.map((bot, index) => nullAt(bot.usage, "bots", index, "usage")),
+      ...input.routines.map((routine, index) => nullAt(routine.usage, "routines", index, "usage")),
+    ]),
   };
-  return [at(0), at(1), at(2), at(3)];
 };
 
-export const normalizeCollector = (input: CollectorInput): CollectorInput => {
-  unique(input.bots.map((bot) => bot.id), "bot id");
-  unique(input.routines.map((routine) => routine.id), "routine id");
-  unique(input.connectors.map((connector) => connector.name), "connector name");
-  unique(input.evidence.map((item) => item.id), "evidence id");
-  unique(input.visibility.map((entry) => entry.signal), "visibility signal");
-  const visibility = visibilityOf(input);
+const gapProblems = (input: CollectorInput): readonly FieldProblem[] => {
+  const unseen = notObserved(input);
+  const problems: FieldProblem[] = [];
+  input.visibility.forEach((entry, index) => {
+    if (entry.signal === "transcripts" || entry.signal === "otherBots" || entry.signal === "auditLog") return;
+    const first = unseen[entry.signal][0];
+    if (entry.seen && first !== undefined) {
+      const reason = entry.signal === "accountRole" ? `${first} is "unknown"` : `${first} is null, which means not observed`;
+      problems.push({
+        pointer: pointerOf(["visibility", index, "seen"]),
+        rule: "null-needs-visibility-gap",
+        must: `must be false, because ${reason}`,
+        help: `Set seen to false for the signal "${entry.signal}" and say why, or give the value that was observed. Never write zero or a guess for a value that was not observed.`,
+      });
+    }
+    if (entry.signal === "accountRole" && !entry.seen && first === undefined) {
+      problems.push({
+        pointer: "/account/kind",
+        rule: "role-needs-a-source",
+        must: `must be "unknown", because the visibility entry for "accountRole" says the role was not seen`,
+        help: "Never infer the role. Use a role only when a tool reported it or the account holder stated it, and then set seen to true for accountRole.",
+      });
+    }
+  });
+  return problems;
+};
+
+const usageProblems = (input: CollectorInput): readonly FieldProblem[] => {
+  const tooHigh = (usage: CollectorV1Usage, ...parts: readonly (string | number)[]): readonly FieldProblem[] =>
+    usage !== null && usage.unit === "percent" && usage.amount7d > 100
+      ? [{ pointer: pointerOf([...parts, "usage", "amount7d"]), rule: "percent-range", must: "must be 100 or less when unit is percent", help: "A percentage is a share of the account's total usage, from 0 to 100." }]
+      : [];
+  return [...input.bots.flatMap((bot, index) => tooHigh(bot.usage, "bots", index)), ...input.routines.flatMap((routine, index) => tooHigh(routine.usage, "routines", index))];
+};
+
+export const normalizeCollector = (input: CollectorInput, schemaCommand: string): CollectorInput => {
+  refuseProblems(schemaCommand, [
+    ...repeats(input.bots.map((bot) => bot.id), (index) => pointerOf(["bots", index, "id"]), "bot id"),
+    ...repeats(input.routines.map((routine) => routine.id), (index) => pointerOf(["routines", index, "id"]), "routine id"),
+    ...repeats(input.connectors.map((connector) => connector.name), (index) => pointerOf(["connectors", index, "name"]), "connector name"),
+    ...repeats(input.evidence.map((item) => item.id), (index) => pointerOf(["evidence", index, "id"]), "evidence id"),
+    ...repeats(input.visibility.map((entry) => entry.signal), (index) => pointerOf(["visibility", index, "signal"]), "visibility signal"),
+    ...gapProblems(input),
+    ...usageProblems(input),
+  ]);
   const bots: readonly CollectorV1Bot[] = input.bots
-    .map((bot) => ({ id: bot.id, name: bot.name, lastActiveAt: bot.lastActiveAt, routineCount: bot.routineCount, usage: { credits7d: bot.usage.credits7d } }))
+    .map((bot) => ({ id: bot.id, name: bot.name, lastActiveAt: bot.lastActiveAt, routineCount: bot.routineCount, usage: copyUsage(bot.usage) }))
     .sort((left, right) => compareText(left.id, right.id));
   const routines = input.routines.map(copyRoutine).sort((left, right) => compareText(left.id, right.id));
   const connectors: readonly CollectorV1Connector[] = input.connectors
@@ -73,7 +124,7 @@ export const normalizeCollector = (input: CollectorInput): CollectorInput => {
     connectors,
     tasks: { open: input.tasks.open, stale7d: input.tasks.stale7d, blocked: input.tasks.blocked },
     pages: { count: input.pages.count, updated7d: input.pages.updated7d },
-    visibility,
+    visibility: visibilityOf(input),
     evidence,
   };
 };
