@@ -1,0 +1,23 @@
+name: Feature request
+description: A change to what the module does.
+title: ""
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the change in terms of the command-line tool. The module is not tied to one industry. Do not include secrets or private account data.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is missing
+      description: The job you cannot do with the module today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like
+      description: The command, the input, and the output you have in mind.
+    validations:
+      required: true

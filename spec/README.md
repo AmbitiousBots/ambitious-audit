@@ -48,7 +48,7 @@ The rules, checked in every reachable state (about 205,000 distinct states):
 
 `RetriesConverge` is a rule about what must eventually happen, so it needs assumptions about what keeps moving ("fairness"): the bot does not wait for ever on a call (it sees the answer or gives up on that call), it retries a failed report while attempts are left, and it confirms an answer it has seen. Nothing is assumed about the network or the service: every call may be lost.
 
-How the model keeps `StoredAtMostOnce`: the report id is a function of the report alone (`ReportIdFor`), never of the attempt, and the service keeps one copy per id. In the code the id is derived from the snapshot and the seed, so building the same report again gives the same id.
+How the model keeps `StoredAtMostOnce`: the report id is a function of the report alone (`ReportIdFor`), never of the attempt, and the service keeps one copy per id. In the code the id is derived from the snapshot, the seed and `--now`, never from the attempt, so building the same report again with the same seed and time gives the same id.
 
 ## `broken/`: showing that each rule can fail
 
@@ -65,14 +65,13 @@ Each file in `spec/broken/` is the model with one line changed to a plausible mi
 
 ## Which code this constrains
 
-The delivery code does not exist yet. When it is written:
-
 | Code | Constrained by |
 |---|---|
-| `DeriveReportId` in `src/domain/types.ts`: the report id from snapshot and seed | `StoredAtMostOnce` |
-| `ApplyMark`: which `report mark` changes are accepted, and `MarkAllowedFrom` | `NoSendWithoutReview`, `SentOnlyIfStored`, `BoundedAttempts` |
-| `NextDeliveryStep`: what the bot is told to do next with a report | `NoSendWithoutReview`, `BoundedAttempts`, `RetriesConverge` |
-| the routine that calls the service and marks the outcome | all five |
+| `DeriveReportId` in `src/domain/types.ts`, implemented by `deriveReportId` in `src/domain/report.ts`: the report id from the snapshot, the seed and `--now`, never from the attempt | `StoredAtMostOnce` |
+| `ApplyMark` and `MarkAllowedFrom` in `src/domain/types.ts`, implemented by `applyMark` in `src/domain/delivery.ts`: which `report mark` changes are accepted | `NoSendWithoutReview`, `SentOnlyIfStored`, `BoundedAttempts` |
+| `NextDeliveryStep` in `src/domain/types.ts`, implemented by `nextDeliveryStep` in `src/domain/delivery.ts`: what the bot is told to do next | `NoSendWithoutReview`, `BoundedAttempts`, `RetriesConverge` |
+| `buildStoredReport` and `markStoredReport` in `src/db/store.ts`: the writes for one build or one mark, inside the single transaction the command runner opens for that command | all five, for the module's own record |
+| the routine in `skills/snapshot-routine` that calls the service and marks the outcome | all five |
 | the service's handling of `send_report` (in the service's own repository) | `StoredAtMostOnce`: one stored copy per report id |
 
 The module has no network access, so it cannot stop a bot from calling the service. It enforces the rules through what it accepts and what it answers: `NextDeliveryStep` says `waitForReview` until a required review is marked, and `ApplyMark` refuses `sent` or `failed` for a report whose required review is missing, and refuses another attempt after `maxAttempts` failures.

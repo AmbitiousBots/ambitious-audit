@@ -2,9 +2,11 @@
 
 The audit module turns what a bot can see in an account into a snapshot, diffs it against a stored baseline, applies rule-based findings and returns at most three recommendations, each citing its evidence, plus a map of what the bot could not see. It is a command-line tool with JSON in and JSON out, one SQLite file and no user interface. The bot shows results in its own pages. A report leaves the computer only when the customer has approved the tool that sends it.
 
-The module follows the shared module contract in [ambitious-kit](https://github.com/AmbitiousBots/ambitious-kit/blob/kit-v0.1.0/MODULE_CONTRACT.md): one binary, a JSON envelope on stdout, one SQLite file, deterministic with `--now` and `--seed`, and no network. Version 0.1.0 uses kit 0.1.0, kept under `vendor/` so a build does not download it.
+The module follows the shared module contract in [ambitious-kit](https://github.com/AmbitiousBots/ambitious-kit/blob/kit-v0.1.1/MODULE_CONTRACT.md): one binary, a JSON envelope on stdout, one SQLite file, deterministic with `--now` and `--seed`, and no network. Version 0.1.0 uses kit 0.1.1, kept under `vendor/` so a build does not download it.
 
 Part of [Ambitious](https://ambitiousbots.com). Licensed under the Apache License, Version 2.0; see [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+To contribute, read [CONTRIBUTING.md](CONTRIBUTING.md). The [code of conduct](CODE_OF_CONDUCT.md) covers how people treat each other here. Report a vulnerability in private, as [SECURITY.md](SECURITY.md) describes.
 
 ## Commands
 
