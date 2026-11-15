@@ -1,7 +1,8 @@
 import { isRecord } from "@ambitious/kit/domain/json";
 import { pointerOf, refuseProblems, type FieldProblem } from "./field-problems.ts";
 import { VISIBILITY_SIGNALS, type CollectorInput, type VisibilityEntry, type VisibilityMap, type VisibilitySignal } from "./types.ts";
-import type { CollectorV1Bot, CollectorV1Connector, CollectorV1Evidence, CollectorV1Routine, CollectorV1Usage } from "./wire.generated.ts";
+import { parseTimestamp } from "./time.ts";
+import type { CollectorV1Bot, CollectorV1BotUsage, CollectorV1Connector, CollectorV1Evidence, CollectorV1Routine, CollectorV1Usage } from "./wire.generated.ts";
 
 const compareText = (left: string, right: string): number => (left < right ? -1 : left > right ? 1 : 0);
 
@@ -17,12 +18,25 @@ const repeats = (values: readonly string[], pointer: (index: number) => string, 
 
 const copyUsage = (usage: CollectorV1Usage): CollectorV1Usage => (usage === null ? null : { unit: usage.unit, amount7d: usage.amount7d });
 
+const copyBotUsage = (usage: CollectorV1BotUsage): CollectorV1BotUsage => {
+  if (usage === null || usage.unit !== "share") return copyUsage(usage);
+  return {
+    unit: "share",
+    period: usage.period,
+    ...(usage.periodStart === undefined ? {} : { periodStart: usage.periodStart }),
+    ...(usage.periodEnd === undefined ? {} : { periodEnd: usage.periodEnd }),
+    share: usage.share,
+  };
+};
+
 const copyRoutine = (routine: CollectorV1Routine): CollectorV1Routine => ({
   id: routine.id,
   botId: routine.botId,
   schedule: routine.schedule,
   state: routine.state,
   lastRunAt: routine.lastRunAt,
+  ...(routine.pausedAt === undefined ? {} : { pausedAt: routine.pausedAt }),
+  ...(routine.createdAt === undefined ? {} : { createdAt: routine.createdAt }),
   usage: copyUsage(routine.usage),
   ...(routine.lastError === undefined ? {} : { lastError: routine.lastError }),
 });
@@ -87,12 +101,51 @@ const gapProblems = (input: CollectorInput): readonly FieldProblem[] => {
   return problems;
 };
 
+type ShareUsage = Extract<CollectorV1BotUsage, { readonly unit: "share" }>;
+
+const sharesOf = (input: CollectorInput): readonly { readonly index: number; readonly usage: ShareUsage }[] =>
+  input.bots.flatMap((bot, index) => (bot.usage !== null && bot.usage.unit === "share" ? [{ index, usage: bot.usage }] : []));
+
+const sharePeriodProblems = (input: CollectorInput): readonly FieldProblem[] => {
+  const shares = sharesOf(input);
+  const first = shares[0];
+  const problems: FieldProblem[] = [];
+  for (const { index, usage } of shares) {
+    const start = usage.periodStart === undefined ? null : parseTimestamp(usage.periodStart);
+    const end = usage.periodEnd === undefined ? null : parseTimestamp(usage.periodEnd);
+    if (start !== null && end !== null && start > end) {
+      problems.push({ pointer: pointerOf(["bots", index, "usage", "periodStart"]), rule: "period-order", must: "must not be after periodEnd", help: "Give the start and the end of the period as the usage report shows them." });
+    }
+    if (first !== undefined && (usage.period !== first.usage.period || usage.periodStart !== first.usage.periodStart || usage.periodEnd !== first.usage.periodEnd)) {
+      problems.push({
+        pointer: pointerOf(["bots", index, "usage", "period"]),
+        rule: "usage-one-period",
+        must: `must name the same period, with the same periodStart and periodEnd, as ${pointerOf(["bots", first.index, "usage"])}`,
+        help: "Shares are parts of one total, so every share in a document comes from one usage report for one period. Use null for a bot that report did not list.",
+      });
+    }
+  }
+  if (input.usageOther !== undefined && first === undefined) {
+    problems.push({
+      pointer: "/usageOther",
+      rule: "usage-other-needs-a-share",
+      must: "must be left out, because no bot has a usage with unit share to say which period it covers",
+      help: "usageOther is the summed share of the bots a usage report did not list by name. Add the bots the report did list, each with its share, or leave usageOther out.",
+    });
+  }
+  return problems;
+};
+
 const usageProblems = (input: CollectorInput): readonly FieldProblem[] => {
-  const tooHigh = (usage: CollectorV1Usage, ...parts: readonly (string | number)[]): readonly FieldProblem[] =>
+  const tooHigh = (usage: CollectorV1BotUsage, ...parts: readonly (string | number)[]): readonly FieldProblem[] =>
     usage !== null && usage.unit === "percent" && usage.amount7d > 100
       ? [{ pointer: pointerOf([...parts, "usage", "amount7d"]), rule: "percent-range", must: "must be 100 or less when unit is percent", help: "A percentage is a share of the account's total usage, from 0 to 100." }]
       : [];
-  return [...input.bots.flatMap((bot, index) => tooHigh(bot.usage, "bots", index)), ...input.routines.flatMap((routine, index) => tooHigh(routine.usage, "routines", index))];
+  return [
+    ...input.bots.flatMap((bot, index) => tooHigh(bot.usage, "bots", index)),
+    ...input.routines.flatMap((routine, index) => tooHigh(routine.usage, "routines", index)),
+    ...sharePeriodProblems(input),
+  ];
 };
 
 export const normalizeCollector = (input: CollectorInput, schemaCommand: string): CollectorInput => {
@@ -106,7 +159,7 @@ export const normalizeCollector = (input: CollectorInput, schemaCommand: string)
     ...usageProblems(input),
   ]);
   const bots: readonly CollectorV1Bot[] = input.bots
-    .map((bot) => ({ id: bot.id, name: bot.name, lastActiveAt: bot.lastActiveAt, routineCount: bot.routineCount, usage: copyUsage(bot.usage) }))
+    .map((bot) => ({ id: bot.id, name: bot.name, lastActiveAt: bot.lastActiveAt, routineCount: bot.routineCount, usage: copyBotUsage(bot.usage) }))
     .sort((left, right) => compareText(left.id, right.id));
   const routines = input.routines.map(copyRoutine).sort((left, right) => compareText(left.id, right.id));
   const connectors: readonly CollectorV1Connector[] = input.connectors
@@ -124,6 +177,10 @@ export const normalizeCollector = (input: CollectorInput, schemaCommand: string)
     connectors,
     tasks: { open: input.tasks.open, stale7d: input.tasks.stale7d, blocked: input.tasks.blocked },
     pages: { count: input.pages.count, updated7d: input.pages.updated7d },
+    ...(input.usageOther === undefined
+      ? {}
+      : { usageOther: { share: input.usageOther.share, ...(input.usageOther.botCount === undefined ? {} : { botCount: input.usageOther.botCount }) } }),
+    ...(input.weeklyLimitUsed === undefined ? {} : { weeklyLimitUsed: { percent: input.weeklyLimitUsed.percent, asOf: input.weeklyLimitUsed.asOf } }),
     visibility: visibilityOf(input),
     evidence,
   };

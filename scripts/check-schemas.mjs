@@ -38,6 +38,9 @@ const KEYWORDS = new Set([
   "minimum",
   "maximum",
   "$ref",
+  "if",
+  "then",
+  "else",
 ]);
 const ORGANISATION_NAME = /^org(ani[sz]ation)?[_-]?(id|key|slug|name)?$/i;
 
@@ -50,6 +53,43 @@ const resolve = (root, node) => {
   const name = node.$ref.match(/^#\/\$defs\/([A-Za-z0-9]+)$/)?.[1];
   if (name === undefined || root.$defs?.[name] === undefined) throw new Error(`cannot follow ${node.$ref}`);
   return root.$defs[name];
+};
+
+const sameMembers = (left, right) => left.length === right.length && left.every((item) => right.includes(item));
+
+const formsOf = (node) => {
+  if (node.if === undefined && node.then === undefined && node.else === undefined) return null;
+  const tags = Object.keys(node.if?.properties ?? {});
+  const tag = tags[0];
+  const value = node.if?.properties?.[tag]?.const;
+  const allowed = node.properties?.[tag]?.enum ?? [];
+  const wellFormedIf =
+    node.if !== undefined &&
+    sameMembers(Object.keys(node.if), ["type", "required", "properties"]) &&
+    node.if.type === "object" &&
+    tags.length === 1 &&
+    sameMembers(node.if.required ?? [], [tag]) &&
+    sameMembers(Object.keys(node.if.properties[tag]), ["const"]) &&
+    allowed.includes(value) &&
+    (node.required ?? []).includes(tag);
+  const wellFormedBranch = (branch) =>
+    branch !== undefined &&
+    Object.keys(branch).every((key) => key === "required" || key === "properties") &&
+    (branch.required ?? []).every((name) => node.properties?.[name] !== undefined) &&
+    Object.entries(branch.properties ?? {}).every(
+      ([name, schema]) => node.properties?.[name] !== undefined && name !== tag && schema === (branch.required ?? []).includes(name),
+    ) &&
+    (branch.required ?? []).every((name) => branch.properties?.[name] === true);
+  if (!wellFormedIf || !wellFormedBranch(node.then) || !wellFormedBranch(node.else)) return { problem: true };
+  const form = (branch, tagSchema) => ({
+    required: [...(node.required ?? []), ...(branch.required ?? [])],
+    properties: Object.fromEntries(
+      Object.entries(node.properties)
+        .filter(([name]) => branch.properties?.[name] !== false)
+        .map(([name, schema]) => [name, name === tag ? tagSchema : schema]),
+    ),
+  });
+  return { problem: false, forms: [form(node.else, { enum: allowed.filter((item) => item !== value) }), form(node.then, { const: value })] };
 };
 
 const shapeChildren = (node) => [
@@ -91,6 +131,9 @@ const lintNode = (root, node, at) => {
   for (const name of Object.keys(node.properties ?? {})) {
     if (ORGANISATION_NAME.test(name)) say(`declares "${name}"; the organisation comes from the caller's credential and never from the payload`);
   }
+  if (formsOf(node)?.problem === true) {
+    say('uses "if", "then" and "else" in a way this check does not understand. They may only split an object into two forms by one required property: "if" tests that property against a const, and "then" and "else" each list more required properties, set each of those to true under "properties", and set the properties of the other form to false');
+  }
   for (const [index, part] of (node.allOf ?? []).entries()) {
     const keys = Object.keys(part);
     if (keys.length !== 1 || keys[0] !== "contains") say(`allOf/${index} may only hold a "contains" test`);
@@ -128,14 +171,17 @@ const typeOf = (root, typeName, node) => {
       return `readonly ${/[ |{]/.test(item) ? `(${item})` : item}[]`;
     }
     if (type === "object") {
-      const required = new Set(node.required ?? []);
-      const named = Object.entries(node.properties ?? {}).map(
-        ([key, child]) => `readonly ${key}${required.has(key) ? "" : "?"}: ${typeOf(root, typeName, child)}`,
-      );
       const patterned = Object.values(node.patternProperties ?? {}).map(
         (child) => `readonly [name: string]: ${typeOf(root, typeName, child)}`,
       );
-      return `{ ${[...named, ...patterned].join("; ")} }`;
+      const objectType = (form) => {
+        const required = new Set(form.required ?? []);
+        const named = Object.entries(form.properties ?? {}).map(
+          ([key, child]) => `readonly ${key}${required.has(key) ? "" : "?"}: ${typeOf(root, typeName, child)}`,
+        );
+        return `{ ${[...named, ...patterned].join("; ")} }`;
+      };
+      return (formsOf(node)?.forms ?? [node]).map(objectType).join(" | ");
     }
     throw new Error(`no TypeScript type for JSON type "${type}"`);
   });

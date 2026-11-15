@@ -1,0 +1,169 @@
+{
+  "schemaVersion": 1,
+  "collectedAt": "2026-11-15T00:00:00Z",
+  "account": {
+    "kind": "owner",
+    "label": "Main workspace"
+  },
+  "bots": [
+    {
+      "id": "bot-1",
+      "name": "Scheduling bot",
+      "lastActiveAt": "2026-11-14T18:30:00Z",
+      "routineCount": 3,
+      "usage": {
+        "unit": "share",
+        "period": "this_week",
+        "periodStart": "2026-11-09T00:00:00Z",
+        "periodEnd": "2026-11-15T00:00:00Z",
+        "share": 0.62
+      }
+    },
+    {
+      "id": "bot-2",
+      "name": "Reporting bot",
+      "lastActiveAt": "2026-11-13T10:00:00Z",
+      "routineCount": 1,
+      "usage": {
+        "unit": "share",
+        "period": "this_week",
+        "periodStart": "2026-11-09T00:00:00Z",
+        "periodEnd": "2026-11-15T00:00:00Z",
+        "share": 0.3
+      }
+    },
+    {
+      "id": "bot-3",
+      "name": "Archive bot",
+      "lastActiveAt": null,
+      "routineCount": 0,
+      "usage": null
+    }
+  ],
+  "routines": [
+    {
+      "id": "routine-1",
+      "botId": "bot-1",
+      "schedule": "every weekday at 08:00",
+      "state": "active",
+      "lastRunAt": "2026-11-14T08:00:00Z",
+      "usage": null
+    },
+    {
+      "id": "routine-2",
+      "botId": "bot-1",
+      "schedule": "every Friday at 16:00",
+      "state": "paused",
+      "lastRunAt": "never",
+      "createdAt": "2026-11-14T15:00:00Z",
+      "usage": null
+    },
+    {
+      "id": "routine-3",
+      "botId": "bot-1",
+      "schedule": "every Monday at 09:00",
+      "state": "paused",
+      "lastRunAt": "2026-11-02T09:00:00Z",
+      "pausedAt": "2026-11-07T00:00:00Z",
+      "usage": null
+    },
+    {
+      "id": "routine-4",
+      "botId": "bot-2",
+      "schedule": "on the first day of the month",
+      "state": "paused",
+      "lastRunAt": null,
+      "usage": null
+    }
+  ],
+  "connectors": [
+    {
+      "name": "calendar",
+      "status": "ok"
+    }
+  ],
+  "tasks": {
+    "open": 4,
+    "stale7d": 0,
+    "blocked": 0
+  },
+  "pages": {
+    "count": 6,
+    "updated7d": 2
+  },
+  "usageOther": {
+    "share": 0.08,
+    "botCount": 1
+  },
+  "weeklyLimitUsed": {
+    "percent": 37,
+    "asOf": "2026-11-15T00:00:00Z"
+  },
+  "visibility": [
+    {
+      "signal": "transcripts",
+      "seen": false,
+      "why": "The bot has no tool that reads other bots' conversations."
+    },
+    {
+      "signal": "usage",
+      "seen": false,
+      "why": "The usage tool gave shares for the two bots that used the most this week and one summed line for the rest, which holds bot-3. It gives nothing per routine."
+    },
+    {
+      "signal": "otherBots",
+      "seen": true,
+      "why": "Listed with the account's bot list tool."
+    },
+    {
+      "signal": "auditLog",
+      "seen": false,
+      "why": "The account does not give this bot access to the audit log."
+    },
+    {
+      "signal": "accountRole",
+      "seen": true,
+      "why": "The account holder stated the role."
+    },
+    {
+      "signal": "tasks",
+      "seen": true,
+      "why": "Read from the task module's output."
+    },
+    {
+      "signal": "pages",
+      "seen": true,
+      "why": "Counted with the page list tool."
+    },
+    {
+      "signal": "botActivity",
+      "seen": false,
+      "why": "The bot list shows no last-active time for bot-3."
+    },
+    {
+      "signal": "routines",
+      "seen": false,
+      "why": "The routine list shows no last run for routine-4, and a pause time only for routine-3."
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev-1",
+      "kind": "excerpt",
+      "text": "Paused on 7 November.",
+      "source": "routine-3"
+    },
+    {
+      "id": "ev-2",
+      "kind": "excerpt",
+      "text": "Paused. The routine list shows no pause date and no last run.",
+      "source": "routine-4"
+    },
+    {
+      "id": "ev-3",
+      "kind": "excerpt",
+      "text": "Created paused on 14 November. It has not run yet.",
+      "source": "routine-2"
+    }
+  ]
+}

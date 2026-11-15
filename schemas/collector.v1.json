@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:ambitious:audit:schema:collector:v1",
   "title": "Collector input, version 1",
-  "description": "What a bot gathered about its own account with its own tools, as input to the snapshot command. A value the bot could not observe is written as null, never as zero and never as a guess. Each group of values that holds a null must be matched by the visibility entry for that group with seen set to false: account.kind unknown by accountRole, a null in tasks by tasks, a null in pages by pages, a null lastActiveAt by botActivity, a null routineCount or lastRunAt by routines, and a null usage by usage. The snapshot command rejects a document that breaks this, and the report shows every entry whose seen is false. Every text field is short and bounded, so the file cannot carry a full conversation transcript.",
+  "description": "What a bot gathered about its own account with its own tools, as input to the snapshot command. A value the bot could not observe is written as null, never as zero and never as a guess. Each group of values that holds a null must be matched by the visibility entry for that group with seen set to false: account.kind unknown by accountRole, a null in tasks by tasks, a null in pages by pages, a null lastActiveAt by botActivity, a null routineCount or lastRunAt by routines, and a null usage by usage. The snapshot command rejects a document that breaks this, and the report shows every entry whose seen is false. An optional field (pausedAt and createdAt on a routine, usageOther, weeklyLimitUsed) is left out when it was not observed. Every text field is short and bounded, so the file cannot carry a full conversation transcript.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -142,6 +142,49 @@
         }
       }
     },
+    "usageOther": {
+      "type": "object",
+      "description": "The one line an account's usage report gives for all the bots it did not list by name, when it lists only the bots that used the most and sums the rest. It covers the same period as the bots' usage in share form, so at least one bot must carry such a usage. Leave it out when the report had no such line. A bot counted in this line has usage null, because its own share was not observed.",
+      "additionalProperties": false,
+      "required": [
+        "share"
+      ],
+      "properties": {
+        "share": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "The summed share of all the account's bot usage in the period, from 0 to 1, that went to the bots not listed by name."
+        },
+        "botCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000,
+          "description": "How many bots the line sums, when the report says so."
+        }
+      }
+    },
+    "weeklyLimitUsed": {
+      "type": "object",
+      "description": "How much of the account's weekly usage limit has been used in the current week, when the account reports it. Leave it out otherwise. It is never worked out from shares.",
+      "additionalProperties": false,
+      "required": [
+        "percent",
+        "asOf"
+      ],
+      "properties": {
+        "percent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000,
+          "description": "The percentage of the weekly limit used so far, as the account reports it. 100 means the whole limit."
+        },
+        "asOf": {
+          "$ref": "#/$defs/timestamp",
+          "description": "When the percentage was read, in UTC."
+        }
+      }
+    },
     "visibility": {
       "$ref": "#/$defs/visibility"
     },
@@ -186,7 +229,7 @@
         "unit",
         "amount7d"
       ],
-      "description": "Usage over the 7 days before collectedAt, or null when it was not observed. The visibility signal usage counts as seen only when usage was observed for that period for every listed bot and every listed routine, in either unit.",
+      "description": "A routine's usage over the 7 days before collectedAt, or null when it was not observed. The visibility signal usage counts as seen only when usage was observed for every listed bot and every listed routine.",
       "properties": {
         "unit": {
           "enum": [
@@ -200,6 +243,89 @@
           "minimum": 0,
           "maximum": 1000000000,
           "description": "Credits used, or the percentage share from 0 to 100, in the last 7 days."
+        }
+      }
+    },
+    "botUsage": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "unit"
+      ],
+      "description": "A bot's usage, or null when it was not observed. It takes one of two forms, chosen by unit. With unit credits or percent it is an amount for the 7 days before collectedAt, held in amount7d. With unit share it is the bot's share of all the account's bot usage in a named period, held in share with period; this is the form for an account whose usage report gives shares by bot for a period. Use null for a bot the usage report did not list by name, including one counted only in a summed line for the remaining bots; never write 0 for it. Every bot that uses the share form must name the same period.",
+      "properties": {
+        "unit": {
+          "enum": [
+            "credits",
+            "percent",
+            "share"
+          ],
+          "description": "credits when the account reports credits used in the last 7 days; percent when it reports a percentage of the account's usage in the last 7 days; share when it reports the bot's share of all bot usage in a named period."
+        },
+        "amount7d": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000000000,
+          "description": "With unit credits or percent only: credits used, or the percentage from 0 to 100, in the last 7 days."
+        },
+        "period": {
+          "enum": [
+            "this_week",
+            "last_7_days",
+            "last_30_days"
+          ],
+          "description": "With unit share only: the period the share covers. this_week is the current week so far, last_7_days and last_30_days are the 7 or 30 days before the report was read."
+        },
+        "periodStart": {
+          "$ref": "#/$defs/timestamp",
+          "description": "With unit share only: when the period starts, in UTC, if the usage report says so."
+        },
+        "periodEnd": {
+          "$ref": "#/$defs/timestamp",
+          "description": "With unit share only: when the period ends, in UTC, if the usage report says so."
+        },
+        "share": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "With unit share only: the bot's share of all the account's bot usage in the period, from 0 to 1, as the usage report gives it. A report that shows 42% is written as 0.42. Write 0 only when the report lists the bot with no usage."
+        }
+      },
+      "if": {
+        "type": "object",
+        "required": [
+          "unit"
+        ],
+        "properties": {
+          "unit": {
+            "const": "share"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "period",
+          "share"
+        ],
+        "properties": {
+          "period": true,
+          "share": true,
+          "amount7d": false
+        }
+      },
+      "else": {
+        "required": [
+          "amount7d"
+        ],
+        "properties": {
+          "amount7d": true,
+          "period": false,
+          "periodStart": false,
+          "periodEnd": false,
+          "share": false
         }
       }
     },
@@ -237,7 +363,7 @@
           "description": "How many routines the bot has, or null when not observed."
         },
         "usage": {
-          "$ref": "#/$defs/usage"
+          "$ref": "#/$defs/botUsage"
         }
       }
     },
@@ -272,10 +398,18 @@
             "paused",
             "failing"
           ],
-          "description": "The routine's current state."
+          "description": "The routine's current state. For a paused routine, give pausedAt when the account shows when it was paused."
         },
         "lastRunAt": {
           "$ref": "#/$defs/lastSeen"
+        },
+        "pausedAt": {
+          "$ref": "#/$defs/timestamp",
+          "description": "When the routine was paused, in UTC, if the account shows it. Leave it out when the account does not show it; never work it out from another time. A paused routine is reported as paused for a number of days only when this is given."
+        },
+        "createdAt": {
+          "$ref": "#/$defs/timestamp",
+          "description": "When the routine was created, in UTC, if the account shows it. Leave it out otherwise."
         },
         "usage": {
           "$ref": "#/$defs/usage"
@@ -337,7 +471,7 @@
             "botActivity",
             "routines"
           ],
-          "description": "The kind of information this entry is about: transcripts (conversation text), usage (usage figures for bots and routines), otherBots (bots other than the one collecting), auditLog (the account's audit log), accountRole (how the bot is attached to the account), tasks (task counts), pages (page counts), botActivity (when each bot was last active), routines (each bot's routine count and when each routine last ran)."
+          "description": "The kind of information this entry is about: transcripts (conversation text), usage (usage figures for every listed bot and routine), otherBots (bots other than the one collecting), auditLog (the account's audit log), accountRole (how the bot is attached to the account), tasks (task counts), pages (page counts), botActivity (when each bot was last active), routines (each bot's routine count and when each routine last ran)."
         },
         "seen": {
           "type": "boolean",

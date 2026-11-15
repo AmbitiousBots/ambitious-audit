@@ -6,9 +6,11 @@ export type CollectorV1Id = string;
 
 export type CollectorV1Usage = { readonly unit: "credits" | "percent"; readonly amount7d: number } | null;
 
-export type CollectorV1Bot = { readonly id: CollectorV1Id; readonly name: string; readonly lastActiveAt: CollectorV1LastSeen; readonly routineCount: number | null; readonly usage: CollectorV1Usage };
+export type CollectorV1BotUsage = { readonly unit: "credits" | "percent"; readonly amount7d: number } | { readonly unit: "share"; readonly period: "this_week" | "last_7_days" | "last_30_days"; readonly periodStart?: CollectorV1Timestamp; readonly periodEnd?: CollectorV1Timestamp; readonly share: number } | null;
 
-export type CollectorV1Routine = { readonly id: CollectorV1Id; readonly botId: CollectorV1Id; readonly schedule: string; readonly state: "active" | "paused" | "failing"; readonly lastRunAt: CollectorV1LastSeen; readonly usage: CollectorV1Usage; readonly lastError?: string };
+export type CollectorV1Bot = { readonly id: CollectorV1Id; readonly name: string; readonly lastActiveAt: CollectorV1LastSeen; readonly routineCount: number | null; readonly usage: CollectorV1BotUsage };
+
+export type CollectorV1Routine = { readonly id: CollectorV1Id; readonly botId: CollectorV1Id; readonly schedule: string; readonly state: "active" | "paused" | "failing"; readonly lastRunAt: CollectorV1LastSeen; readonly pausedAt?: CollectorV1Timestamp; readonly createdAt?: CollectorV1Timestamp; readonly usage: CollectorV1Usage; readonly lastError?: string };
 
 export type CollectorV1Connector = { readonly name: string; readonly status: "ok" | "needsAuth" | "needsGrant" | "initializing" | "error" };
 
@@ -20,7 +22,7 @@ export type CollectorV1Evidence = { readonly id: CollectorV1EvidenceId; readonly
 
 export type CollectorV1EvidenceId = string;
 
-export type CollectorV1 = { readonly schemaVersion: 1; readonly collectedAt: CollectorV1Timestamp; readonly account: { readonly kind: "owner" | "guest" | "team" | "unknown"; readonly label: string }; readonly bots: readonly CollectorV1Bot[]; readonly routines: readonly CollectorV1Routine[]; readonly connectors: readonly CollectorV1Connector[]; readonly tasks: { readonly open: number | null; readonly stale7d: number | null; readonly blocked: number | null }; readonly pages: { readonly count: number | null; readonly updated7d: number | null }; readonly visibility: CollectorV1Visibility; readonly evidence: readonly CollectorV1Evidence[] };
+export type CollectorV1 = { readonly schemaVersion: 1; readonly collectedAt: CollectorV1Timestamp; readonly account: { readonly kind: "owner" | "guest" | "team" | "unknown"; readonly label: string }; readonly bots: readonly CollectorV1Bot[]; readonly routines: readonly CollectorV1Routine[]; readonly connectors: readonly CollectorV1Connector[]; readonly tasks: { readonly open: number | null; readonly stale7d: number | null; readonly blocked: number | null }; readonly pages: { readonly count: number | null; readonly updated7d: number | null }; readonly usageOther?: { readonly share: number; readonly botCount?: number }; readonly weeklyLimitUsed?: { readonly percent: number; readonly asOf: CollectorV1Timestamp }; readonly visibility: CollectorV1Visibility; readonly evidence: readonly CollectorV1Evidence[] };
 
 export type SendReportV1Timestamp = string;
 
