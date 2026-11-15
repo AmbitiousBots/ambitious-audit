@@ -21,9 +21,9 @@
     "verify": "node verify/run"
   },
   "devDependencies": {
-    "@ambitious/depcruise": "file:vendor/ambitious-depcruise-0.2.1.tgz",
-    "@ambitious/kit": "file:vendor/ambitious-kit-0.2.1.tgz",
-    "@ambitious/lint": "file:vendor/ambitious-lint-0.2.1.tgz",
+    "@ambitious/depcruise": "file:vendor/ambitious-depcruise-0.2.6.tgz",
+    "@ambitious/kit": "file:vendor/ambitious-kit-0.2.6.tgz",
+    "@ambitious/lint": "file:vendor/ambitious-lint-0.2.6.tgz",
     "@types/node": "24.19.2",
     "ajv": "8.20.0",
     "dependency-cruiser": "18.7.2",
