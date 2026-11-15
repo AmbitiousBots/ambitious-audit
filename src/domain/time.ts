@@ -27,3 +27,6 @@ export const observedInstant = (value: string | null): Observed => {
 
 export const olderThanDays = (referenceMs: number, earlier: Observed, days: number): boolean =>
   earlier.known && (earlier.at === "never" || referenceMs - earlier.at > days * DAY_MS);
+
+export const withinDays = (referenceMs: number, earlier: Observed, days: number): boolean =>
+  earlier.known && earlier.at !== "never" && referenceMs - earlier.at <= days * DAY_MS;

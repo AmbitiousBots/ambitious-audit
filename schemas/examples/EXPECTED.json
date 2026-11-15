@@ -198,5 +198,45 @@
   "collector.v1/invalid/routine-usage-left-out.json": {
     "keyword": "required",
     "at": "/routines/0"
+  },
+  "collector.v1/invalid/share-with-amount7d.json": {
+    "keyword": "false schema",
+    "at": "/bots/0/usage/amount7d"
+  },
+  "collector.v1/invalid/share-above-one.json": {
+    "keyword": "maximum",
+    "at": "/bots/0/usage/share"
+  },
+  "collector.v1/invalid/share-without-period.json": {
+    "keyword": "required",
+    "at": "/bots/0/usage"
+  },
+  "collector.v1/invalid/share-for-an-unknown-period.json": {
+    "keyword": "enum",
+    "at": "/bots/0/usage/period"
+  },
+  "collector.v1/invalid/credits-with-a-period.json": {
+    "keyword": "false schema",
+    "at": "/bots/0/usage/period"
+  },
+  "collector.v1/invalid/routine-usage-as-share.json": {
+    "keyword": "enum",
+    "at": "/routines/0/usage/unit"
+  },
+  "collector.v1/invalid/paused-at-is-null.json": {
+    "keyword": "type",
+    "at": "/routines/3/pausedAt"
+  },
+  "collector.v1/invalid/paused-at-is-a-number-of-days.json": {
+    "keyword": "type",
+    "at": "/routines/3/pausedAt"
+  },
+  "collector.v1/invalid/usage-other-without-share.json": {
+    "keyword": "required",
+    "at": "/usageOther"
+  },
+  "collector.v1/invalid/weekly-limit-without-as-of.json": {
+    "keyword": "required",
+    "at": "/weeklyLimitUsed"
   }
 }

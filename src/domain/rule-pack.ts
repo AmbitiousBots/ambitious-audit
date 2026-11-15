@@ -5,11 +5,12 @@ import connectorNeedsGrant from "../../rules/connector-needs-grant.json" with { 
 import duplicateRoutines from "../../rules/duplicate-routines.json" with { type: "json" };
 import failingRoutine from "../../rules/failing-routine.json" with { type: "json" };
 import pausedRoutine from "../../rules/paused-routine.json" with { type: "json" };
+import pausedRoutineSinceUnknown from "../../rules/paused-routine-since-unknown.json" with { type: "json" };
 import settingsFile from "../../rules/settings.json" with { type: "json" };
 import staleTasks from "../../rules/stale-tasks.json" with { type: "json" };
 import { parseRule, type RuleDefinition } from "./rules.ts";
 
-const FILES: readonly unknown[] = [failingRoutine, connectorNeedsAuth, connectorNeedsGrant, pausedRoutine, botUnused, staleTasks, duplicateRoutines];
+const FILES: readonly unknown[] = [failingRoutine, connectorNeedsAuth, connectorNeedsGrant, pausedRoutine, pausedRoutineSinceUnknown, botUnused, staleTasks, duplicateRoutines];
 
 export const RULES: readonly RuleDefinition[] = FILES.map(parseRule);
 

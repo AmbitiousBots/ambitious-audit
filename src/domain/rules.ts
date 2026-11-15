@@ -1,12 +1,15 @@
 import { isRecord } from "@ambitious/kit/domain/json";
-import { observedInstant, olderThanDays, parseTimestamp } from "./time.ts";
+import { observedInstant, olderThanDays, parseTimestamp, withinDays } from "./time.ts";
 import type { CollectorInput, Effort, EvidenceId, EvidenceIds, Fingerprint, RuleId, Severity } from "./types.ts";
+import type { CollectorV1Bot, CollectorV1BotUsage, CollectorV1Routine } from "./wire.generated.ts";
 import { isEvidenceId, isFingerprint, isRecommendationId, isRuleId } from "./types.ts";
 
 type CountText = { readonly one: string; readonly many: string };
 
 type RuleWhen =
-  | { readonly kind: "routine-state"; readonly state: "paused" | "failing"; readonly olderThanDays?: number }
+  | { readonly kind: "routine-state"; readonly state: "paused" | "failing" }
+  | { readonly kind: "routine-paused-for"; readonly olderThanDays: number }
+  | { readonly kind: "routine-paused-since-unknown"; readonly unlessCreatedOrRunWithinDays: number }
   | { readonly kind: "connector-status"; readonly status: "needsAuth" | "needsGrant" }
   | { readonly kind: "bot-unused"; readonly olderThanDays: number }
   | { readonly kind: "stale-tasks"; readonly moreThan: number }
@@ -56,9 +59,12 @@ const parseWhen = (value: unknown): RuleWhen => {
   if (kind === "routine-state") {
     const state = value.state;
     if (state !== "paused" && state !== "failing") return brokenRule("when.state");
-    const olderThanDays = value.olderThanDays;
-    if (olderThanDays === undefined) return { kind: "routine-state", state };
-    return { kind: "routine-state", state, olderThanDays: wholeNumber(olderThanDays, "when.olderThanDays") };
+    if (value.olderThanDays !== undefined) return brokenRule("when.olderThanDays, which a routine-state rule does not take; use routine-paused-for");
+    return { kind: "routine-state", state };
+  }
+  if (kind === "routine-paused-for") return { kind: "routine-paused-for", olderThanDays: wholeNumber(value.olderThanDays, "when.olderThanDays") };
+  if (kind === "routine-paused-since-unknown") {
+    return { kind: "routine-paused-since-unknown", unlessCreatedOrRunWithinDays: wholeNumber(value.unlessCreatedOrRunWithinDays, "when.unlessCreatedOrRunWithinDays") };
   }
   if (kind === "connector-status") {
     const status = value.status;
@@ -127,16 +133,50 @@ const hit = (rule: RuleDefinition, snapshot: CollectorInput, subjects: readonly 
   };
 };
 
+const pausedLongerThan = (routine: CollectorV1Routine, collected: number, days: number): boolean =>
+  routine.state === "paused" && routine.pausedAt !== undefined && olderThanDays(collected, observedInstant(routine.pausedAt), days);
+
+const pausedSinceUnknown = (routine: CollectorV1Routine, collected: number, days: number): boolean =>
+  routine.state === "paused" &&
+  routine.pausedAt === undefined &&
+  !withinDays(collected, observedInstant(routine.createdAt ?? null), days) &&
+  !withinDays(collected, observedInstant(routine.lastRunAt), days);
+
+type UsageReading = { readonly used: boolean; readonly coversAtLeastDays: number; readonly coversAtMostDays: number };
+
+const SHARE_PERIOD_DAYS = {
+  this_week: { coversAtLeastDays: 0, coversAtMostDays: 7 },
+  last_7_days: { coversAtLeastDays: 7, coversAtMostDays: 7 },
+  last_30_days: { coversAtLeastDays: 30, coversAtMostDays: 30 },
+} as const;
+
+const usageReading = (usage: CollectorV1BotUsage): UsageReading | null => {
+  if (usage === null) return null;
+  if (usage.unit === "share") return { used: usage.share > 0, ...SHARE_PERIOD_DAYS[usage.period] };
+  return { used: usage.amount7d > 0, coversAtLeastDays: 7, coversAtMostDays: 7 };
+};
+
+const botUnused = (bot: CollectorV1Bot, collected: number, days: number): boolean => {
+  const usage = usageReading(bot.usage);
+  if (usage !== null && usage.used && usage.coversAtMostDays <= days) return false;
+  const lastActive = observedInstant(bot.lastActiveAt);
+  if (lastActive.known) return olderThanDays(collected, lastActive, days);
+  return usage !== null && !usage.used && usage.coversAtLeastDays >= days;
+};
+
 const subjectsOf = (rule: RuleDefinition, snapshot: CollectorInput): { readonly subjects: readonly string[]; readonly evidenceKeys: readonly string[] } | null => {
   const when = rule.when;
   const collected = referenceMs(snapshot);
   if (when.kind === "routine-state") {
-    const matched = snapshot.routines.filter((routine) => {
-      if (routine.state !== when.state) return false;
-      if (when.olderThanDays === undefined) return true;
-      return olderThanDays(collected, observedInstant(routine.lastRunAt), when.olderThanDays);
-    });
-    const subjects = matched.map((routine) => routine.id);
+    const subjects = snapshot.routines.filter((routine) => routine.state === when.state).map((routine) => routine.id);
+    return { subjects, evidenceKeys: subjects };
+  }
+  if (when.kind === "routine-paused-for") {
+    const subjects = snapshot.routines.filter((routine) => pausedLongerThan(routine, collected, when.olderThanDays)).map((routine) => routine.id);
+    return { subjects, evidenceKeys: subjects };
+  }
+  if (when.kind === "routine-paused-since-unknown") {
+    const subjects = snapshot.routines.filter((routine) => pausedSinceUnknown(routine, collected, when.unlessCreatedOrRunWithinDays)).map((routine) => routine.id);
     return { subjects, evidenceKeys: subjects };
   }
   if (when.kind === "connector-status") {
@@ -144,9 +184,7 @@ const subjectsOf = (rule: RuleDefinition, snapshot: CollectorInput): { readonly 
     return { subjects, evidenceKeys: subjects };
   }
   if (when.kind === "bot-unused") {
-    const subjects = snapshot.bots
-      .filter((bot) => olderThanDays(collected, observedInstant(bot.lastActiveAt), when.olderThanDays))
-      .map((bot) => bot.id);
+    const subjects = snapshot.bots.filter((bot) => botUnused(bot, collected, when.olderThanDays)).map((bot) => bot.id);
     return { subjects, evidenceKeys: subjects };
   }
   if (when.kind === "stale-tasks") {

@@ -7,6 +7,7 @@ import connectorNeedsGrant from "../rules/connector-needs-grant.json" with { typ
 import duplicateRoutines from "../rules/duplicate-routines.json" with { type: "json" };
 import failingRoutine from "../rules/failing-routine.json" with { type: "json" };
 import pausedRoutine from "../rules/paused-routine.json" with { type: "json" };
+import pausedRoutineSinceUnknown from "../rules/paused-routine-since-unknown.json" with { type: "json" };
 import staleTasks from "../rules/stale-tasks.json" with { type: "json" };
 import { parseCollector } from "../src/domain/input.ts";
 import { assembleReport, recommendationsFrom } from "../src/domain/report.ts";
@@ -14,7 +15,7 @@ import { evaluateRules, parseRule, type RuleDefinition, type RuleHit } from "../
 import type { CollectorInput, EvidenceId } from "../src/domain/types.ts";
 import { isEvidenceId, isFingerprint, isReportId, isRuleId } from "../src/domain/types.ts";
 
-const FILES: readonly unknown[] = [failingRoutine, connectorNeedsAuth, connectorNeedsGrant, pausedRoutine, botUnused, staleTasks, duplicateRoutines];
+const FILES: readonly unknown[] = [failingRoutine, connectorNeedsAuth, connectorNeedsGrant, pausedRoutine, pausedRoutineSinceUnknown, botUnused, staleTasks, duplicateRoutines];
 
 type Fixture = {
   readonly name: string;
@@ -223,7 +224,7 @@ test("when the role is unknown, at most three recommendations are returned and t
   const recommended = recommendationsFrom(hits, new Set()).map((item) => String(item.recommendation.id));
   assert.deepEqual(recommended, ["connector-sign-in-a", "connector-sign-in-b", "connector-sign-in-c"]);
   const reportId = branded("018f0000-0000-7000-8000-000000000098", isReportId, "report id");
-  const { payload } = assembleReport(snapshot, hits, new Set(), reportId, "0.2.1");
+  const { payload } = assembleReport(snapshot, hits, new Set(), reportId, "0.2.2");
   assert.equal(payload.recommendations.length, 3);
   assert.equal(payload.recommendations.every((item) => item.evidenceIds.length === 2), true);
   assert.deepEqual(payload.findings.filter((finding) => finding.withheld === "roleUnknown").map((finding) => String(finding.ruleId)), ["connector-sign-in-role-bound"]);

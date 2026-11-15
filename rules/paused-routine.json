@@ -10,34 +10,62 @@
     "one": "1 routine has been paused for more than 7 days.",
     "many": "{count} routines have been paused for more than 7 days."
   },
-  "when": { "kind": "routine-state", "state": "paused", "olderThanDays": 7 },
+  "when": { "kind": "routine-paused-for", "olderThanDays": 7 },
   "fixtures": [
     {
-      "name": "a routine paused for longer than 7 days",
+      "name": "a routine paused 8 days before",
       "expect": "hit",
+      "routines": [
+        { "id": "routine-1", "botId": "bot-1", "schedule": "every day at 08:00", "state": "paused", "lastRunAt": "2026-11-06T08:00:00Z", "pausedAt": "2026-11-07T00:00:00Z", "usage": null }
+      ]
+    },
+    {
+      "name": "a routine paused 8 days before whose last run was not observed",
+      "expect": "hit",
+      "routines": [
+        { "id": "routine-1", "botId": "bot-1", "schedule": "every day at 08:00", "state": "paused", "lastRunAt": null, "pausedAt": "2026-11-07T00:00:00Z", "usage": null }
+      ]
+    },
+    {
+      "name": "a routine paused 2 days before",
+      "expect": "miss",
+      "routines": [
+        { "id": "routine-1", "botId": "bot-1", "schedule": "every day at 08:00", "state": "paused", "lastRunAt": "2026-11-01T00:00:00Z", "pausedAt": "2026-11-13T00:00:00Z", "usage": null }
+      ]
+    },
+    {
+      "name": "a paused routine with no pause time that last ran 14 days before",
+      "expect": "miss",
       "routines": [
         { "id": "routine-1", "botId": "bot-1", "schedule": "every day at 08:00", "state": "paused", "lastRunAt": "2026-11-01T00:00:00Z", "usage": null }
       ]
     },
     {
-      "name": "a paused routine that has never run",
-      "expect": "hit",
+      "name": "a paused routine with no pause time that has never run",
+      "expect": "miss",
       "routines": [
         { "id": "routine-1", "botId": "bot-1", "schedule": "every day at 08:00", "state": "paused", "lastRunAt": "never", "usage": null }
       ]
     },
     {
-      "name": "a paused routine whose last run was not observed",
+      "name": "a paused routine with no pause time whose last run was not observed",
       "expect": "miss",
       "routines": [
         { "id": "routine-1", "botId": "bot-1", "schedule": "every day at 08:00", "state": "paused", "lastRunAt": null, "usage": null }
       ]
     },
     {
-      "name": "a routine paused for less than 7 days",
+      "name": "a routine created paused on the day of the snapshot",
       "expect": "miss",
       "routines": [
-        { "id": "routine-1", "botId": "bot-1", "schedule": "every day at 08:00", "state": "paused", "lastRunAt": "2026-11-14T00:00:00Z", "usage": null }
+        { "id": "routine-1", "botId": "bot-1", "schedule": "every day at 08:00", "state": "paused", "lastRunAt": "never", "createdAt": "2026-11-14T09:00:00Z", "usage": null }
+      ]
+    },
+    {
+      "name": "an active routine that carries an old pause time",
+      "expect": "miss",
+      "routines": [
+        { "id": "routine-1", "botId": "bot-1", "schedule": "every day at 08:00", "state": "active", "lastRunAt": "2026-11-14T08:00:00Z", "pausedAt": "2026-11-01T00:00:00Z", "usage": null }
       ]
     }
   ]

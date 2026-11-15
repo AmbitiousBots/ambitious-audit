@@ -20,7 +20,21 @@ A value no tool returned is `null`. Never write 0 for it, and never estimate.
 - `pages.count` and `pages.updated7d` are `null` when the page tool did not return them.
 - `lastActiveAt` on a bot and `lastRunAt` on a routine are a UTC time, the word `never` when the account shows it has not happened yet, or `null` when the account does not show it.
 - `routineCount` on a bot is `null` when it was not shown.
-- `usage` on each bot and each routine is `{ "unit": "credits", "amount7d": 412.5 }` when the account reports credits, `{ "unit": "percent", "amount7d": 82.5 }` when it reports a share of the total, or `null` when it reports neither for that bot or routine.
+- `pausedAt` on a paused routine is the UTC time the account shows for when it was paused. `createdAt` is the UTC time the account shows for when the routine was created. Leave each one out when the account does not show it; do not write `null`, and do not work a pause time out from the last run or from anything else. Without `pausedAt` the audit says only that the routine is paused, with no number of days.
+- `usage` on each routine is `{ "unit": "credits", "amount7d": 412.5 }` or `{ "unit": "percent", "amount7d": 82.5 }` when the account reports the routine's usage for the last 7 days, or `null` when it does not.
+- `usage` on each bot takes the same two forms, or the share form described next, or `null`.
+
+## Usage reported as shares
+
+Some accounts report usage only as each bot's share of all bot usage in a period, list the bots that used the most, and sum the rest as one line such as "Other bots". Ask the usage tool for one period and write what it returns:
+
+- For each bot the report lists by name: `"usage": { "unit": "share", "period": "this_week", "share": 0.42 }`. `period` is `this_week` (the current week so far), `last_7_days` or `last_30_days`, whichever was asked for. A share shown as 42% is written `0.42`. Add `periodStart` and `periodEnd` when the report gives them. Use the same period for every bot.
+- For the summed line: `"usageOther": { "share": 0.08, "botCount": 3 }` at the top of the document. Leave `botCount` out when the report does not say how many bots the line sums.
+- For every bot the report did not list by name, including each bot inside the summed line: `"usage": null`. Its own share was not observed. Never write 0 for it, and never split the summed share between bots.
+- When the report gives the percentage of the weekly limit used, which it does only for the current week: `"weeklyLimitUsed": { "percent": 37, "asOf": "2026-11-15T00:00:00Z" }` at the top of the document. Leave it out for other periods.
+- A report that gives shares by bot gives nothing per routine, so each routine's `usage` is `null`.
+
+When any bot or routine has `usage: null`, the `usage` signal is `seen: false`. Say in its `why` what the report did give, which bots are only inside the summed line, and that it gives nothing per routine.
 - `connectors` holds this bot's own connectors, as its connector list shows them. A connector's `status` is `ok`, `needsAuth`, `needsGrant`, `initializing` or `error`, as the list shows it.
 
 ## Visibility

@@ -44,6 +44,7 @@ const problemOf = (error: SchemaError): FieldProblem => {
   if (error.keyword === "enum") return at(error.instancePath, `must be one of ${quoted(error.params.allowedValues)}`);
   if (error.keyword === "const") return at(error.instancePath, `must be ${quoted(error.params.allowedValue)}`);
   if (error.keyword === "pattern") return at(error.instancePath, "is not written in the required form");
+  if (error.keyword === "false schema") return at(error.instancePath, "must be left out, because it does not go with the other fields of this value");
   if (error.keyword === "contains") {
     const signal = containedSignal(error.schema);
     return at(error.instancePath, signal === null ? "is missing a required entry" : `must have one entry whose signal is "${signal}"`);
@@ -62,7 +63,7 @@ export const validatorOf = (schema: unknown, name: string): Validator => {
       const seen = new Set<string>();
       const problems: FieldProblem[] = [];
       for (const error of validate.errors ?? []) {
-        if (error.schemaPath.includes("/contains/")) continue;
+        if (error.schemaPath.includes("/contains/") || error.keyword === "if") continue;
         const problem = problemOf(error);
         const key = `${problem.pointer}\t${problem.rule}\t${problem.must}`;
         if (seen.has(key)) continue;

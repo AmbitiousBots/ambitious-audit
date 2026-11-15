@@ -39,6 +39,63 @@
       "bots": [
         { "id": "bot-1", "name": "Helper", "lastActiveAt": "2026-11-14T00:00:00Z", "routineCount": 1, "usage": { "unit": "credits", "amount7d": 1 } }
       ]
+    },
+    {
+      "name": "a bot whose last activity was not observed, listed with no share of the last 30 days of usage",
+      "expect": "hit",
+      "bots": [
+        { "id": "bot-1", "name": "Helper", "lastActiveAt": null, "routineCount": null, "usage": { "unit": "share", "period": "last_30_days", "share": 0 } }
+      ]
+    },
+    {
+      "name": "a bot last active 20 days before, with a share of the last 30 days of usage",
+      "expect": "hit",
+      "bots": [
+        { "id": "bot-1", "name": "Helper", "lastActiveAt": "2026-10-26T00:00:00Z", "routineCount": 0, "usage": { "unit": "share", "period": "last_30_days", "share": 0.1 } }
+      ]
+    },
+    {
+      "name": "a bot whose last activity was not observed, listed with no share of the last 7 days of usage",
+      "expect": "miss",
+      "bots": [
+        { "id": "bot-1", "name": "Helper", "lastActiveAt": null, "routineCount": null, "usage": { "unit": "share", "period": "last_7_days", "share": 0 } }
+      ]
+    },
+    {
+      "name": "a bot whose last activity was not observed, listed with no share of this week's usage",
+      "expect": "miss",
+      "bots": [
+        { "id": "bot-1", "name": "Helper", "lastActiveAt": null, "routineCount": null, "usage": { "unit": "share", "period": "this_week", "share": 0 } }
+      ]
+    },
+    {
+      "name": "a bot whose last activity was not observed, listed with a share of the last 30 days of usage",
+      "expect": "miss",
+      "bots": [
+        { "id": "bot-1", "name": "Helper", "lastActiveAt": null, "routineCount": null, "usage": { "unit": "share", "period": "last_30_days", "share": 0.25 } }
+      ]
+    },
+    {
+      "name": "a bot whose last activity and usage were not observed, because the usage report did not list it by name",
+      "expect": "miss",
+      "bots": [
+        { "id": "bot-1", "name": "Helper", "lastActiveAt": null, "routineCount": null, "usage": null },
+        { "id": "bot-2", "name": "Helper", "lastActiveAt": "2026-11-14T00:00:00Z", "routineCount": 1, "usage": { "unit": "share", "period": "last_30_days", "share": 0.9 } }
+      ]
+    },
+    {
+      "name": "a bot shown as never active that has a share of this week's usage",
+      "expect": "miss",
+      "bots": [
+        { "id": "bot-1", "name": "Helper", "lastActiveAt": "never", "routineCount": 0, "usage": { "unit": "share", "period": "this_week", "share": 0.4 } }
+      ]
+    },
+    {
+      "name": "a bot shown as last active 20 days before that used credits in the last 7 days",
+      "expect": "miss",
+      "bots": [
+        { "id": "bot-1", "name": "Helper", "lastActiveAt": "2026-10-26T00:00:00Z", "routineCount": 0, "usage": { "unit": "credits", "amount7d": 3 } }
+      ]
     }
   ]
 }

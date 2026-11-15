@@ -26,7 +26,9 @@ What the schemas hold to, and `npm run check:schemas` checks:
 
 Patterns are used instead of the `format` keyword, because validators are allowed to ignore `format`.
 
-What a schema cannot say, and the module's code must check: every cited evidence id exists in the evidence list, and `period.from` is not after `period.to`. For the collector document the code also checks that ids are not repeated, that every `null` (and an `unknown` role) is matched by its visibility entry with `seen: false`, that a role is named only when `accountRole` was seen, and that a percentage is at most 100. The description at the top of `collector.v1.json` lists which signal covers which values.
+What a schema cannot say, and the module's code must check: every cited evidence id exists in the evidence list, and `period.from` is not after `period.to`. For the collector document the code also checks that ids are not repeated, that every `null` (and an `unknown` role) is matched by its visibility entry with `seen: false`, that a role is named only when `accountRole` was seen, that a percentage is at most 100, that every usage given as a share names the same period, that a period does not start after it ends, and that `usageOther` comes with at least one listed share. The description at the top of `collector.v1.json` lists which signal covers which values.
+
+A bot's usage takes one of two forms, chosen by `unit`. The schema says this with `if`, `then` and `else`: `then` and `else` each name the fields their form requires and set the fields of the other form to `false`, so a value cannot mix the two. `npm run check:schemas` accepts those keywords only in this shape, and writes the two forms as two separate types.
 
 ## Examples
 

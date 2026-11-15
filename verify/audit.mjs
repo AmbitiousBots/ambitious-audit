@@ -97,5 +97,19 @@ const refusal = JSON.parse(refused.stdout).errors[0];
 if (refused.status !== 1 || refusal.code !== "E_INPUT_SCHEMA" || !refusal.message.includes("/visibility/5/seen") || !refusal.message.includes("rule: null-needs-visibility-gap")) {
   stop("a null count with no visibility gap was accepted, or the error did not name the field and the rule");
 }
+const sharesDocument = JSON.parse(readFileSync(join(root, "test", "fixtures", "shares.json"), "utf8"));
+const shares = run(["snapshot"], JSON.stringify(sharesDocument));
+const pausedFindings = run(["findings"], JSON.stringify({ snapshotId: shares.snapshotId })).findings.filter((item) => item.ruleId.startsWith("paused-routine"));
+const longPause = pausedFindings.find((item) => item.ruleId === "paused-routine");
+const unknownPause = pausedFindings.find((item) => item.ruleId === "paused-routine-since-unknown");
+if (pausedFindings.length !== 2 || longPause?.evidenceIds.join() !== "ev-1" || unknownPause?.evidenceIds.join() !== "ev-2" || unknownPause.severity !== "low" || /days|more than/.test(unknownPause.summary)) {
+  stop("paused routines were not reported as: one paused for more than 7 days by its pause time, one paused since an unknown time with no duration, and none for the routine created paused the day before");
+}
+if (shares.normalized.usageOther?.share !== 0.08 || shares.normalized.weeklyLimitUsed?.percent !== 37 || shares.normalized.bots[0].usage?.share !== 0.62 || shares.normalized.bots[2].usage !== null) {
+  stop("usage given as shares, the summed line for the other bots or the weekly limit was not stored as written");
+}
+if (run(["findings"], JSON.stringify({ snapshotId: shares.snapshotId })).findings.some((item) => item.ruleId === "bot-unused")) stop("a bot the usage report did not list was called unused");
+sharesDocument.visibility = sharesDocument.visibility.map((entry) => (entry.signal === "usage" ? { ...entry, seen: true } : entry));
+if (fail(["snapshot"], JSON.stringify(sharesDocument)) !== 1) stop("usage was accepted as seen although one bot's usage was not listed");
 if (run(["schema"]).schema.$id !== "urn:ambitious:audit:schema:collector:v1") stop("schema did not print the collector schema");
 process.stdout.write(`verify/audit: ok. report ${built.reportId}, ${recommendations.length} recommendation(s)\n`);
