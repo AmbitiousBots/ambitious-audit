@@ -33,7 +33,7 @@ bash spec/check.sh && npm ci && npx tsc --noEmit && npm run check:schemas
 
 ## Covered code
 
-Last confirmed in step with the code at commit `20bc340963802e6ff8157fe98959d96176e26083`. The model describes the design in `spec/README.md` and the types in `src/domain/types.ts`.
+Last confirmed in step with the code at commit `fe460a6c147a2951faedd2d4871d68cdf11c99ed`. The model describes the design in `spec/README.md` and the types in `src/domain/types.ts`.
 
 | Model part | Code it describes |
 |---|---|
@@ -45,7 +45,7 @@ Last confirmed in step with the code at commit `20bc340963802e6ff8157fe98959d961
 | `ServiceStores`, `stored` | the service's handling of `send_report`: one stored copy per report id |
 | `schemas/*.json` | `src/domain/wire.generated.ts` (generated), `SendReportPayload`, `SendFeedbackPayload`, `WIRE_PATTERNS`, `WIRE_LIMITS` |
 
-Run `git log 20bc340963802e6ff8157fe98959d96176e26083..HEAD -- src/domain src/db spec schemas scripts`. If it lists commits, read them against the table before you trust a pass. Move the commit above forward only after you have confirmed that every row still describes the code at the new commit.
+Run `git log fe460a6c147a2951faedd2d4871d68cdf11c99ed..HEAD -- src/domain src/db spec schemas scripts`. If it lists commits, read them against the table before you trust a pass. Move the commit above forward only after you have confirmed that every row still describes the code at the new commit.
 
 One step in the model is one transaction in the code. The command runner opens that transaction for the whole command, so `buildStoredReport` and `markStoredReport` do not open another. If a mark is ever split across transactions, the model no longer describes it; model the split before relying on a pass.
 
