@@ -3,7 +3,7 @@
   "severity": "medium",
   "effort": "small",
   "rank": 25,
-  "dependsOnRole": true,
+  "dependsOnRole": false,
   "title": "Give the bot access to the connector",
   "why": "A connector that is connected but not shared with this bot cannot be used by it. Give the bot access, or remove the routines that depend on the connector.",
   "summary": {

@@ -207,6 +207,28 @@ test("cited recommendation evidence stays in the report when the evidence list i
   assert.equal(payload.evidence[0]?.id, "ev-31");
 });
 
+test("when the role is unknown, at most three recommendations are returned and the ones that depend on the role are left out", () => {
+  const connectors = ["calendar", "documents"].map((name) => ({ name, status: "needsAuth" as const }));
+  const known = snapshotFor({ name: "many", expect: "hit", connectors, tasks: { open: 4, stale7d: 2, blocked: 0 } });
+  const snapshot = parseCollector({
+    ...known,
+    account: { kind: "unknown", label: "Main" },
+    visibility: known.visibility.map((entry) => (entry.signal === "accountRole" ? { ...entry, seen: false, why: "No tool reports the role." } : entry)),
+  });
+  const signIn = parseRule(connectorNeedsAuth);
+  const copies = ["connector-sign-in-a", "connector-sign-in-b", "connector-sign-in-c"].map((id, index) => ({ ...signIn, id: branded(id, isRuleId, "rule id"), rank: index + 1 }));
+  const roleBound = { ...signIn, id: branded("connector-sign-in-role-bound", isRuleId, "rule id"), rank: 0, dependsOnRole: true };
+  const hits = evaluateRules(snapshot, [roleBound, signIn, ...copies, parseRule(staleTasks)]);
+  assert.equal(hits.length, 6);
+  const recommended = recommendationsFrom(hits, new Set()).map((item) => String(item.recommendation.id));
+  assert.deepEqual(recommended, ["connector-sign-in-a", "connector-sign-in-b", "connector-sign-in-c"]);
+  const reportId = branded("018f0000-0000-7000-8000-000000000098", isReportId, "report id");
+  const { payload } = assembleReport(snapshot, hits, new Set(), reportId, "0.2.1");
+  assert.equal(payload.recommendations.length, 3);
+  assert.equal(payload.recommendations.every((item) => item.evidenceIds.length === 2), true);
+  assert.deepEqual(payload.findings.filter((finding) => finding.withheld === "roleUnknown").map((finding) => String(finding.ruleId)), ["connector-sign-in-role-bound"]);
+});
+
 test("a suppressed fingerprint is dropped and an unknown one is kept", () => {
   const rule = parseRule(failingRoutine);
   const snapshot = snapshotFor({

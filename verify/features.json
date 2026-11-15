@@ -1,7 +1,7 @@
 [
   {
     "id": "audit-flow",
-    "userVisible": "A fresh account can be snapshotted, diffed, limited to three evidence-backed recommendations, and turned into a schema-valid report that is reviewed before it is marked sent. An account where nothing could be observed gets only visibility findings, no recommendation, and a report that says the role is unknown and holds no invented count. A null with no matching visibility gap is refused with the field and the rule named.",
+    "userVisible": "A fresh account can be snapshotted, diffed, limited to three evidence-backed recommendations, and turned into a schema-valid report that is reviewed before it is marked sent. An account where nothing could be observed gets only visibility findings, no recommendation, and a report that says the role is unknown and holds no invented count. An account whose role is unknown still gets evidence-backed advice about the bot's own connectors, and no advice that depends on the role. A null with no matching visibility gap is refused with the field and the rule named.",
     "check": "node verify/audit.mjs"
   },
   {

@@ -13,6 +13,21 @@ const FILES: readonly unknown[] = [failingRoutine, connectorNeedsAuth, connector
 
 export const RULES: readonly RuleDefinition[] = FILES.map(parseRule);
 
+export const OWN_CONNECTOR_RULE_IDS: readonly string[] = ["connector-needs-auth", "connector-needs-grant"];
+
+for (const rule of RULES) {
+  const citesOnlyOwnConnectors = rule.when.kind === "connector-status";
+  if (citesOnlyOwnConnectors !== OWN_CONNECTOR_RULE_IDS.includes(rule.id)) {
+    throw new Error(`OWN_CONNECTOR_RULE_IDS must list exactly the rules that fire on a connector status, and it disagrees about ${rule.id}.`);
+  }
+  if (citesOnlyOwnConnectors && rule.dependsOnRole) {
+    throw new Error(`rules/${rule.id}.json cites only this bot's own connectors, so its dependsOnRole must be false.`);
+  }
+}
+
+const unlisted = OWN_CONNECTOR_RULE_IDS.filter((id) => !RULES.some((rule) => rule.id === id));
+if (unlisted.length > 0) throw new Error(`OWN_CONNECTOR_RULE_IDS names a rule that has no file: ${unlisted.join(", ")}.`);
+
 const days = isRecord(settingsFile) ? settingsFile.suppressionDays : undefined;
 
 if (typeof days !== "number" || !Number.isInteger(days) || days < 1) {

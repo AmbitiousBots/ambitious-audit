@@ -21,7 +21,7 @@ A value no tool returned is `null`. Never write 0 for it, and never estimate.
 - `lastActiveAt` on a bot and `lastRunAt` on a routine are a UTC time, the word `never` when the account shows it has not happened yet, or `null` when the account does not show it.
 - `routineCount` on a bot is `null` when it was not shown.
 - `usage` on each bot and each routine is `{ "unit": "credits", "amount7d": 412.5 }` when the account reports credits, `{ "unit": "percent", "amount7d": 82.5 }` when it reports a share of the total, or `null` when it reports neither for that bot or routine.
-- A connector's `status` is `ok`, `needsAuth`, `needsGrant`, `initializing` or `error`, as the account shows it.
+- `connectors` holds this bot's own connectors, as its connector list shows them. A connector's `status` is `ok`, `needsAuth`, `needsGrant`, `initializing` or `error`, as the list shows it.
 
 ## Visibility
 
@@ -32,5 +32,7 @@ Every `null` needs its signal set to `seen: false`: `accountRole` for an unknown
 ## Evidence
 
 `evidence` entries use ids `ev-1`, `ev-2`, and so on. Point `source` at the bot id, routine id or connector name the line is about, or `tasks` for task counts, so a finding about that thing can cite it. A recommendation is only made when its finding has evidence.
+
+Write one evidence line for each connector whose status is `needsAuth` or `needsGrant`, with `source` set to exactly the connector's `name`. Advice about the bot's own connectors is given even when the role is `unknown`, but only for connectors that have such a line.
 
 Write the document to a file outside the bot's private data directory and pass it with `--in`.

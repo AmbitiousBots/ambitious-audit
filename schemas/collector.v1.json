@@ -40,7 +40,7 @@
             "team",
             "unknown"
           ],
-          "description": "How the bot is attached to the account. Use unknown when no tool reported the role and the account holder has not stated it. Never infer the role from what the bot can or cannot see. With unknown, the audit runs in partial-visibility mode: recommendations that depend on the role are withheld, their findings are marked, and the report states that the role is unknown."
+          "description": "How the bot is attached to the account. Use unknown when no tool reported the role and the account holder has not stated it. Never infer the role from what the bot can or cannot see. With unknown, the audit runs in partial-visibility mode: recommendations that depend on the role are withheld, their findings are marked, and the report states that the role is unknown. Advice about this bot's own connectors (one that needs to be signed in again, or one this bot has no access to) does not depend on the role and is still given."
         },
         "label": {
           "type": "string",

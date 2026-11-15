@@ -174,7 +174,7 @@ test("a collector that observed nothing yields only visibility findings and no r
   assert.match(String(payload.summary), /Not observed: .*task counts.*page counts/);
 });
 
-test("a partly observed account with an unknown role gets findings for what was seen and withholds role-dependent recommendations", (t) => {
+test("a partly observed account with an unknown role gets advice about its own connectors and has role-dependent recommendations withheld", (t) => {
   const home = freshHome(t);
   const stored = run(home, ["snapshot"], fixture("partial.json"));
   assert.equal(stored.exit, 0, stored.stdout);
@@ -182,7 +182,7 @@ test("a partly observed account with an unknown role gets findings for what was 
   const findings = listOf(dataOf(run(home, ["findings"], JSON.stringify({ snapshotId })).data).findings);
   const fromRules = findings.filter((finding) => finding.kind === "rule");
   assert.deepEqual(fromRules.map((finding) => finding.ruleId), ["failing-routine", "connector-needs-auth", "connector-needs-grant", "stale-tasks"]);
-  assert.deepEqual(fromRules.map((finding) => finding.withheld), ["roleUnknown", "roleUnknown", "roleUnknown", undefined]);
+  assert.deepEqual(fromRules.map((finding) => finding.withheld), ["roleUnknown", undefined, undefined, undefined]);
   assert.deepEqual(
     findings.filter((finding) => finding.kind === "visibility").map((finding) => finding.ruleId),
     ["visibility-transcripts", "visibility-usage", "visibility-audit-log", "visibility-account-role", "visibility-pages", "visibility-bot-activity"],
@@ -190,8 +190,12 @@ test("a partly observed account with an unknown role gets findings for what was 
 
   const recommended = dataOf(run(home, ["recommend"], JSON.stringify({ snapshotId })).data);
   assert.equal(recommended.mode, "partial");
-  assert.deepEqual(listOf(recommended.recommendations).map((item) => item.id), ["stale-tasks"]);
-  assert.deepEqual(recommended.withheld, ["failing-routine", "connector-needs-auth", "connector-needs-grant"]);
+  assert.deepEqual(listOf(recommended.recommendations).map((item) => [item.id, item.evidenceIds]), [
+    ["connector-needs-auth", ["ev-4"]],
+    ["connector-needs-grant", ["ev-3"]],
+    ["stale-tasks", ["ev-2"]],
+  ]);
+  assert.deepEqual(recommended.withheld, ["failing-routine"]);
 
   const payload = dataOf(dataOf(run(home, ["report", "build"], JSON.stringify({ snapshotId, reviewRequired: false })).data).payload);
   assert.equal(validateReport(payload), true);
@@ -199,6 +203,55 @@ test("a partly observed account with an unknown role gets findings for what was 
   assert.deepEqual(dataOf(payload.counts).tasks, { open: 14, stale7d: 3, blocked: 1 });
   assert.deepEqual(dataOf(payload.counts).pages, { count: null, updated7d: null });
   assert.ok(listOf(payload.evidence).some((item) => item.id === "ev-2" && item.source === "tasks"));
+  assert.deepEqual(listOf(payload.recommendations).map((item) => item.id), ["connector-needs-auth", "connector-needs-grant", "stale-tasks"]);
+  assert.match(String(payload.summary), /recommendations that depend on it are withheld \(1 in this report\)/);
+});
+
+test("with an unknown role, three connectors that need a sign-in give one sign-in recommendation citing all three, and nothing else", (t) => {
+  const home = freshHome(t);
+  const document = changed(fixture("partial.json"), (copy) => {
+    copy.connectors = ["calendar", "documents", "mail"].map((name) => ({ name, status: "needsAuth" }));
+    copy.tasks = { open: 14, stale7d: 0, blocked: 1 };
+    copy.evidence = [
+      { id: "ev-1", kind: "excerpt", text: "The routine stopped with an error.", source: "routine-2" },
+      { id: "ev-2", kind: "excerpt", text: "calendar: sign in again.", source: "calendar" },
+      { id: "ev-3", kind: "excerpt", text: "documents: sign in again.", source: "documents" },
+      { id: "ev-4", kind: "excerpt", text: "mail: sign in again.", source: "mail" },
+    ];
+  });
+  const stored = run(home, ["snapshot"], document);
+  assert.equal(stored.exit, 0, stored.stdout);
+  const snapshotId = dataOf(stored.data).snapshotId;
+
+  const found = dataOf(run(home, ["findings"], JSON.stringify({ snapshotId })).data);
+  assert.equal(found.mode, "partial");
+  assert.deepEqual(
+    listOf(found.findings).filter((finding) => finding.kind === "rule").map((finding) => [finding.ruleId, finding.withheld]),
+    [["failing-routine", "roleUnknown"], ["connector-needs-auth", undefined]],
+  );
+
+  const recommended = dataOf(run(home, ["recommend"], JSON.stringify({ snapshotId })).data);
+  assert.equal(recommended.mode, "partial");
+  assert.deepEqual(listOf(recommended.recommendations).map((item) => [item.id, item.title, item.evidenceIds]), [["connector-needs-auth", "Sign the connector in again", ["ev-2", "ev-3", "ev-4"]]]);
+  assert.deepEqual(recommended.withheld, ["failing-routine"]);
+
+  const payload = dataOf(dataOf(run(home, ["report", "build"], JSON.stringify({ snapshotId, reviewRequired: true })).data).payload);
+  assert.equal(validateReport(payload), true);
+  assert.equal(payload.accountKind, "unknown");
+  assert.deepEqual(listOf(payload.recommendations).map((item) => item.id), ["connector-needs-auth"]);
+  assert.deepEqual(dataOf(payload.moduleVersions), { audit: "0.2.1" });
+});
+
+test("with an unknown role, a connector that needs a sign-in but has no evidence line gets a finding and no recommendation", (t) => {
+  const home = freshHome(t);
+  const document = changed(fixture("partial.json"), (copy) => {
+    copy.evidence = listOf(copy.evidence).filter((item) => item.source !== "calendar");
+  });
+  const snapshotId = dataOf(run(home, ["snapshot"], document).data).snapshotId;
+  const findings = listOf(dataOf(run(home, ["findings"], JSON.stringify({ snapshotId })).data).findings);
+  assert.ok(findings.some((finding) => finding.ruleId === "connector-needs-auth" && finding.withheld === undefined));
+  const recommended = dataOf(run(home, ["recommend"], JSON.stringify({ snapshotId })).data);
+  assert.deepEqual(listOf(recommended.recommendations).map((item) => item.id), ["connector-needs-grant", "stale-tasks"]);
 });
 
 test("when the role is known the same account gets its role-dependent recommendations", (t) => {
@@ -211,7 +264,7 @@ test("when the role is known the same account gets its role-dependent recommenda
   const recommended = dataOf(run(home, ["recommend"], JSON.stringify({ snapshotId })).data);
   assert.equal(recommended.mode, "full");
   assert.deepEqual(recommended.withheld, []);
-  assert.deepEqual(listOf(recommended.recommendations).map((item) => item.id), ["failing-routine", "connector-needs-grant", "stale-tasks"]);
+  assert.deepEqual(listOf(recommended.recommendations).map((item) => item.id), ["failing-routine", "connector-needs-auth", "connector-needs-grant"]);
 });
 
 test("a refused collector names each failing field as a JSON pointer with the rule it broke", (t) => {

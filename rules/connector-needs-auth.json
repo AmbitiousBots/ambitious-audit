@@ -3,7 +3,7 @@
   "severity": "high",
   "effort": "small",
   "rank": 20,
-  "dependsOnRole": true,
+  "dependsOnRole": false,
   "title": "Sign the connector in again",
   "why": "A connector that needs to be signed in again cannot be used. Sign it in, or remove the routines that depend on it.",
   "summary": {

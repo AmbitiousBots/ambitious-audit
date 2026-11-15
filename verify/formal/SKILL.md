@@ -19,7 +19,7 @@ Tool: TLA+ with the TLC model checker, because the question is whether any order
 
 Bounds: three reports and at most three calls per report, with no limit on the number of steps. `RetriesConverge` assumes the bot keeps going (it does not wait for ever on one call, retries while attempts are left, and confirms an answer it has seen); nothing is assumed about the network. `spec/README.md` lists what is left out.
 
-Unknown values are checked by exhaustive test, not by the model: `test/unknowns.test.ts` builds a collector document for every combination of the six groups of values a bot may be unable to observe (64 documents) and checks that rules fire only on observed values, that each gap becomes a visibility finding, that role-dependent recommendations are withheld when the role is unknown, and that a null whose visibility entry still says `seen: true` is refused. `npm test` runs it.
+Unknown values are checked by exhaustive test, not by the model: `test/unknowns.test.ts` builds a collector document for every combination of the six groups of values a bot may be unable to observe (64 documents) and checks that rules fire only on observed values, that each gap becomes a visibility finding, that role-dependent recommendations are withheld when the role is unknown while advice about the bot's own connectors is still given, and that a null whose visibility entry still says `seen: true` is refused. `npm test` runs it.
 
 The same command also checks the payload schemas in `schemas/`: every string and list is bounded, unknown fields are rejected, no schema has a field for the organisation, every valid example is accepted and every invalid example is rejected for the reason written next to it.
 

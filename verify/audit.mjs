@@ -83,6 +83,13 @@ if (!validate(unseenReport.payload)) stop(`payload for an unobserved account rej
 if (unseenReport.payload.accountKind !== "unknown" || unseenReport.payload.counts.tasks.open !== null || !unseenReport.payload.summary.includes("role is unknown")) {
   stop("the report for an unobserved account did not say the role is unknown, or wrote a number for a count nobody saw");
 }
+const partial = run(["snapshot"], readFileSync(join(root, "test", "fixtures", "partial.json"), "utf8"));
+const partialAdvice = run(["recommend"], JSON.stringify({ snapshotId: partial.snapshotId }));
+const partialIds = partialAdvice.recommendations.map((item) => item.id);
+if (partialAdvice.mode !== "partial" || !partialIds.includes("connector-needs-auth") || partialAdvice.recommendations.some((item) => item.evidenceIds.length < 1) || partialIds.length > 3) {
+  stop("an account with an unknown role got no evidence-backed sign-in advice for the bot's own connector, or more than three recommendations");
+}
+if (partialIds.includes("failing-routine") || !partialAdvice.withheld.includes("failing-routine")) stop("an account with an unknown role got advice that depends on the role");
 const zero = JSON.parse(owner);
 zero.tasks = { open: null, stale7d: null, blocked: null };
 const refused = spawnSync(process.execPath, [binary, "snapshot", "--now", "2026-11-15T00:00:00Z", "--seed", "1"], { encoding: "utf8", input: JSON.stringify(zero), env: { ...process.env, AMBITIOUS_HOME: home } });

@@ -134,6 +134,12 @@
       "kind": "excerpt",
       "text": "The documents connector is connected, but this bot has no access to it.",
       "source": "documents"
+    },
+    {
+      "id": "ev-4",
+      "kind": "excerpt",
+      "text": "The calendar connector shows: sign in again.",
+      "source": "calendar"
     }
   ]
 }
