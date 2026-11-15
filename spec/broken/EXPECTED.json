@@ -1,0 +1,19 @@
+{
+  "FailureNotCounted": {
+    "invariant": "BoundedAttempts",
+    "property": "RetriesConverge",
+    "because": "A failed call is not counted, so the limit on calls is never reached and a report can be retried forever."
+  },
+  "RetryWithNewReportId": {
+    "invariant": "StoredAtMostOnce",
+    "because": "Each retry sends a new report id, so the service stores the same report under two ids."
+  },
+  "SendSkipsReview": {
+    "invariant": "NoSendWithoutReview",
+    "because": "A report is sent straight after it is built, even when a review was required."
+  },
+  "TimeoutCountsAsSent": {
+    "invariant": "SentOnlyIfStored",
+    "because": "A report is marked sent without an answer from the service, so it can be marked sent when the service never stored it."
+  }
+}
