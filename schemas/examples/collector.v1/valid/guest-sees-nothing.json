@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "collectedAt": "2026-11-15T00:00:00.000Z",
+  "account": {
+    "kind": "guest",
+    "label": "Shared workspace"
+  },
+  "bots": [],
+  "routines": [],
+  "connectors": [],
+  "tasks": {
+    "open": 0,
+    "stale7d": 0,
+    "blocked": 0
+  },
+  "pages": {
+    "count": 0,
+    "updated7d": 0
+  },
+  "visibility": [
+    {
+      "signal": "transcripts",
+      "seen": false,
+      "why": "Guests cannot see this."
+    },
+    {
+      "signal": "usage",
+      "seen": false,
+      "why": "Guests cannot see this."
+    },
+    {
+      "signal": "otherBots",
+      "seen": false,
+      "why": "Guests cannot see this."
+    },
+    {
+      "signal": "auditLog",
+      "seen": false,
+      "why": "Guests cannot see this."
+    }
+  ],
+  "evidence": []
+}

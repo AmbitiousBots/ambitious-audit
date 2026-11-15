@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:ambitious:audit:schema:send_feedback:v1",
+  "title": "send_feedback payload, version 1",
+  "description": "Feedback a customer or their bot sends to the monitoring service, optionally about one report. It has no field naming the organisation: the service takes that from the caller's credential.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "feedbackId",
+    "from",
+    "text"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "feedbackId": {
+      "$ref": "#/$defs/uuidV7"
+    },
+    "reportId": {
+      "$ref": "#/$defs/uuidV7"
+    },
+    "from": {
+      "enum": [
+        "customer",
+        "bot"
+      ],
+      "description": "Who wrote the feedback."
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4000,
+      "description": "The feedback, at most 4000 characters."
+    }
+  },
+  "$defs": {
+    "uuidV7": {
+      "type": "string",
+      "maxLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "description": "A version 7 UUID in lower case."
+    }
+  }
+}

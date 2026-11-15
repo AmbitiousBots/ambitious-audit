@@ -1,0 +1,106 @@
+{
+  "send_report.v1/invalid/organisation-id-in-body.json": {
+    "keyword": "additionalProperties",
+    "at": ""
+  },
+  "send_report.v1/invalid/organisation-id-nested.json": {
+    "keyword": "additionalProperties",
+    "at": "/counts"
+  },
+  "send_report.v1/invalid/transcript-field-on-finding.json": {
+    "keyword": "additionalProperties",
+    "at": "/findings/0"
+  },
+  "send_report.v1/invalid/summary-over-1200-characters.json": {
+    "keyword": "maxLength",
+    "at": "/summary"
+  },
+  "send_report.v1/invalid/evidence-text-over-280-characters.json": {
+    "keyword": "maxLength",
+    "at": "/evidence/0/text"
+  },
+  "send_report.v1/invalid/four-recommendations.json": {
+    "keyword": "maxItems",
+    "at": "/recommendations"
+  },
+  "send_report.v1/invalid/recommendation-without-evidence.json": {
+    "keyword": "minItems",
+    "at": "/recommendations/0/evidenceIds"
+  },
+  "send_report.v1/invalid/report-id-is-uuid-v4.json": {
+    "keyword": "pattern",
+    "at": "/reportId"
+  },
+  "send_report.v1/invalid/visibility-missing-a-signal.json": {
+    "keyword": "minItems",
+    "at": "/visibility"
+  },
+  "send_report.v1/invalid/visibility-repeats-a-signal.json": {
+    "keyword": "contains",
+    "at": "/visibility"
+  },
+  "send_report.v1/invalid/audit-version-missing.json": {
+    "keyword": "required",
+    "at": "/moduleVersions"
+  },
+  "send_report.v1/invalid/wrong-schema-version.json": {
+    "keyword": "const",
+    "at": "/schemaVersion"
+  },
+  "send_feedback.v1/invalid/text-over-4000-characters.json": {
+    "keyword": "maxLength",
+    "at": "/text"
+  },
+  "send_feedback.v1/invalid/organisation-id-in-body.json": {
+    "keyword": "additionalProperties",
+    "at": ""
+  },
+  "send_feedback.v1/invalid/feedback-id-is-not-uuid-v7.json": {
+    "keyword": "pattern",
+    "at": "/feedbackId"
+  },
+  "send_feedback.v1/invalid/from-unknown-sender.json": {
+    "keyword": "enum",
+    "at": "/from"
+  },
+  "send_feedback.v1/invalid/text-missing.json": {
+    "keyword": "required",
+    "at": ""
+  },
+  "send_feedback.v1/invalid/text-empty.json": {
+    "keyword": "minLength",
+    "at": "/text"
+  },
+  "collector.v1/invalid/evidence-text-over-280-characters.json": {
+    "keyword": "maxLength",
+    "at": "/evidence/0/text"
+  },
+  "collector.v1/invalid/unknown-routine-state.json": {
+    "keyword": "enum",
+    "at": "/routines/0/state"
+  },
+  "collector.v1/invalid/visibility-missing.json": {
+    "keyword": "required",
+    "at": ""
+  },
+  "collector.v1/invalid/visibility-missing-a-signal.json": {
+    "keyword": "minItems",
+    "at": "/visibility"
+  },
+  "collector.v1/invalid/organisation-id-in-account.json": {
+    "keyword": "additionalProperties",
+    "at": "/account"
+  },
+  "collector.v1/invalid/transcripts-field.json": {
+    "keyword": "additionalProperties",
+    "at": ""
+  },
+  "collector.v1/invalid/timestamp-without-time-zone.json": {
+    "keyword": "pattern",
+    "at": "/collectedAt"
+  },
+  "collector.v1/invalid/evidence-id-malformed.json": {
+    "keyword": "pattern",
+    "at": "/evidence/0/id"
+  }
+}
