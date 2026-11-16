@@ -238,5 +238,145 @@
   "collector.v1/invalid/weekly-limit-without-as-of.json": {
     "keyword": "required",
     "at": "/weeklyLimitUsed"
+  },
+  "send_report.v3/invalid/finding-without-kind.json": {
+    "keyword": "required",
+    "at": "/findings/0"
+  },
+  "send_report.v3/invalid/report-id-is-uuid-v4.json": {
+    "keyword": "pattern",
+    "at": "/reportId"
+  },
+  "send_report.v3/invalid/withheld-for-an-unknown-reason.json": {
+    "keyword": "enum",
+    "at": "/findings/0/withheld"
+  },
+  "send_report.v3/invalid/evidence-source-over-128-characters.json": {
+    "keyword": "maxLength",
+    "at": "/evidence/0/source"
+  },
+  "send_report.v3/invalid/organisation-id-in-body.json": {
+    "keyword": "additionalProperties",
+    "at": ""
+  },
+  "send_report.v3/invalid/wrong-schema-version.json": {
+    "keyword": "const",
+    "at": "/schemaVersion"
+  },
+  "send_report.v3/invalid/summary-over-1200-characters.json": {
+    "keyword": "maxLength",
+    "at": "/summary"
+  },
+  "send_report.v3/invalid/recommendation-without-evidence.json": {
+    "keyword": "minItems",
+    "at": "/recommendations/0/evidenceIds"
+  },
+  "send_report.v3/invalid/transcript-field-on-finding.json": {
+    "keyword": "additionalProperties",
+    "at": "/findings/0"
+  },
+  "send_report.v3/invalid/visibility-missing-a-signal.json": {
+    "keyword": "minItems",
+    "at": "/visibility"
+  },
+  "send_report.v3/invalid/audit-version-missing.json": {
+    "keyword": "required",
+    "at": "/moduleVersions"
+  },
+  "send_report.v3/invalid/account-kind-missing.json": {
+    "keyword": "required",
+    "at": ""
+  },
+  "send_report.v3/invalid/visibility-repeats-a-signal.json": {
+    "keyword": "contains",
+    "at": "/visibility"
+  },
+  "send_report.v3/invalid/four-recommendations.json": {
+    "keyword": "maxItems",
+    "at": "/recommendations"
+  },
+  "send_report.v3/invalid/evidence-text-over-280-characters.json": {
+    "keyword": "maxLength",
+    "at": "/evidence/0/text"
+  },
+  "send_report.v3/invalid/organisation-id-nested.json": {
+    "keyword": "additionalProperties",
+    "at": "/counts"
+  },
+  "send_report.v3/invalid/unobserved-count-left-out.json": {
+    "keyword": "required",
+    "at": "/counts/tasks"
+  },
+  "send_report.v3/invalid/finding-priority-missing.json": {
+    "keyword": "required",
+    "at": "/findings/0"
+  },
+  "send_report.v3/invalid/finding-priority-invalid.json": {
+    "keyword": "enum",
+    "at": "/findings/0/priority"
+  },
+  "send_report.v3/invalid/recommendation-priority-missing.json": {
+    "keyword": "required",
+    "at": "/recommendations/0"
+  },
+  "send_report.v3/invalid/recommendation-priority-invalid.json": {
+    "keyword": "enum",
+    "at": "/recommendations/0/priority"
+  },
+  "send_report.v3/invalid/announcements-missing.json": {
+    "keyword": "required",
+    "at": ""
+  },
+  "send_report.v3/invalid/announcements-null.json": {
+    "keyword": "type",
+    "at": "/announcements"
+  },
+  "send_report.v3/invalid/eleven-announcements.json": {
+    "keyword": "maxItems",
+    "at": "/announcements"
+  },
+  "send_report.v3/invalid/announcement-not-an-object.json": {
+    "keyword": "type",
+    "at": "/announcements/0"
+  },
+  "send_report.v3/invalid/announcement-id-missing.json": {
+    "keyword": "required",
+    "at": "/announcements/0"
+  },
+  "send_report.v3/invalid/announcement-priority-missing.json": {
+    "keyword": "required",
+    "at": "/announcements/0"
+  },
+  "send_report.v3/invalid/announcement-title-missing.json": {
+    "keyword": "required",
+    "at": "/announcements/0"
+  },
+  "send_report.v3/invalid/announcement-id-empty.json": {
+    "keyword": "pattern",
+    "at": "/announcements/0/id"
+  },
+  "send_report.v3/invalid/announcement-id-invalid.json": {
+    "keyword": "pattern",
+    "at": "/announcements/0/id"
+  },
+  "send_report.v3/invalid/announcement-id-over-64-characters.json": {
+    "keyword": "maxLength",
+    "at": "/announcements/0/id"
+  },
+  "send_report.v3/invalid/announcement-priority-invalid.json": {
+    "keyword": "enum",
+    "at": "/announcements/0/priority"
+  },
+  "send_report.v3/invalid/announcement-title-empty.json": {
+    "keyword": "minLength",
+    "at": "/announcements/0/title"
+  },
+  "send_report.v3/invalid/announcement-title-over-120-characters.json": {
+    "keyword": "maxLength",
+    "at": "/announcements/0/title"
+  },
+  "send_report.v3/invalid/announcement-body-in-payload.json": {
+    "keyword": "additionalProperties",
+    "at": "/announcements/0"
   }
 }

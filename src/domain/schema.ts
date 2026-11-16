@@ -3,10 +3,11 @@ import { isRecord } from "@ambitious/kit/domain/json";
 import collectorSchema from "../../schemas/collector.v1.json" with { type: "json" };
 import feedbackSchema from "../../schemas/send_feedback.v1.json" with { type: "json" };
 import reportV1Schema from "../../schemas/send_report.v1.json" with { type: "json" };
-import reportSchema from "../../schemas/send_report.v2.json" with { type: "json" };
+import reportV2Schema from "../../schemas/send_report.v2.json" with { type: "json" };
+import reportSchema from "../../schemas/send_report.v3.json" with { type: "json" };
 import { pointerOf, type FieldProblem } from "./field-problems.ts";
 import type { CollectorInput, SendFeedbackPayload, SendReportPayload } from "./types.ts";
-import type { SendReportV1 } from "./wire.generated.ts";
+import type { SendReportV1, SendReportV2 } from "./wire.generated.ts";
 
 const ajv = new Ajv2020({ allErrors: true, strict: true, verbose: true });
 
@@ -78,14 +79,20 @@ export const validatorOf = (schema: unknown, name: string): Validator => {
 const collector = validatorOf(collectorSchema, "collector");
 const report = validatorOf(reportSchema, "send_report");
 const reportV1 = validatorOf(reportV1Schema, "send_report version 1");
+const reportV2 = validatorOf(reportV2Schema, "send_report version 2");
 const feedback = validatorOf(feedbackSchema, "send_feedback");
 
 export const collectorProblems = (raw: unknown): readonly FieldProblem[] => collector.problems(raw);
 
 export const isCollectorDocument = (raw: unknown): raw is CollectorInput => collector.problems(raw).length === 0;
 
-export const isReportPayload = (raw: unknown): raw is SendReportPayload => report.problems(raw).length === 0;
+export const isReportPayload = (raw: unknown): raw is SendReportPayload => {
+  const matches = (value: unknown): value is SendReportPayload => report.problems(value).length === 0;
+  return matches(raw) && new Set(raw.announcements.map((item) => item.id)).size === raw.announcements.length;
+};
 
 export const isReportV1Payload = (raw: unknown): raw is SendReportV1 => reportV1.problems(raw).length === 0;
+
+export const isReportV2Payload = (raw: unknown): raw is SendReportV2 => reportV2.problems(raw).length === 0;
 
 export const isFeedbackPayload = (raw: unknown): raw is SendFeedbackPayload => feedback.problems(raw).length === 0;

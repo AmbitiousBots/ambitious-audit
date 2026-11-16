@@ -12,6 +12,7 @@ import staleTasks from "../rules/stale-tasks.json" with { type: "json" };
 import { parseCollector } from "../src/domain/input.ts";
 import { assembleReport, recommendationsFrom } from "../src/domain/report.ts";
 import { evaluateRules, parseRule, type RuleDefinition, type RuleHit } from "../src/domain/rules.ts";
+import { isReportPayload } from "../src/domain/schema.ts";
 import type { CollectorInput, EvidenceId } from "../src/domain/types.ts";
 import { isEvidenceId, isFingerprint, isReportId, isRuleId } from "../src/domain/types.ts";
 
@@ -199,7 +200,7 @@ test("cited recommendation evidence stays in the report when the evidence list i
     ruleHit("bot-unused-late", 4, ids(21, 10)),
   ];
   const reportId = branded("018f0000-0000-7000-8000-000000000099", isReportId, "report id");
-  const { payload } = assembleReport(full, hits, new Set(), reportId, "0.2.0");
+  const { payload } = assembleReport(full, hits, new Set(), reportId, "0.3.0");
   const kept = new Set(payload.evidence.map((item) => item.id));
   assert.equal(payload.evidence.length, 30);
   for (const recommendation of payload.recommendations) {
@@ -224,7 +225,7 @@ test("when the role is unknown, at most three recommendations are returned and t
   const recommended = recommendationsFrom(hits, new Set()).map((item) => String(item.recommendation.id));
   assert.deepEqual(recommended, ["connector-sign-in-a", "connector-sign-in-b", "connector-sign-in-c"]);
   const reportId = branded("018f0000-0000-7000-8000-000000000098", isReportId, "report id");
-  const { payload } = assembleReport(snapshot, hits, new Set(), reportId, "0.2.2");
+  const { payload } = assembleReport(snapshot, hits, new Set(), reportId, "0.3.0");
   assert.equal(payload.recommendations.length, 3);
   assert.equal(payload.recommendations.every((item) => item.evidenceIds.length === 2), true);
   assert.deepEqual(payload.findings.filter((finding) => finding.withheld === "roleUnknown").map((finding) => String(finding.ruleId)), ["connector-sign-in-role-bound"]);
@@ -242,4 +243,44 @@ test("a suppressed fingerprint is dropped and an unknown one is kept", () => {
   assert.ok(fingerprint !== undefined);
   assert.equal(recommendationsFrom(hits, new Set([fingerprint])).length, 0);
   assert.equal(recommendationsFrom(hits, new Set()).length, 1);
+});
+
+test("every rule maps high severity to high priority and medium or low severity to low priority in findings and recommendations", () => {
+  const priorities: Readonly<Record<string, "high" | "low">> = {
+    "failing-routine": "high",
+    "connector-needs-auth": "high",
+    "connector-needs-grant": "low",
+    "paused-routine": "low",
+    "paused-routine-since-unknown": "low",
+    "bot-unused": "low",
+    "stale-tasks": "low",
+    "duplicate-routines": "low",
+  };
+  const reportId = branded("018f0000-0000-7000-8000-000000000097", isReportId, "report id");
+  for (const file of FILES) {
+    const rule = parseRule(file);
+    const fixture = fixturesOf(file).find((item) => item.expect === "hit");
+    assert.ok(fixture !== undefined, rule.id);
+    const snapshot = snapshotFor(fixture);
+    const { payload } = assembleReport(snapshot, evaluateRules(snapshot, [rule]), new Set(), reportId, "0.3.0");
+    assert.equal(payload.schemaVersion, 3);
+    assert.deepEqual(payload.announcements, []);
+    const finding = payload.findings.find((item) => item.ruleId === rule.id);
+    assert.ok(finding !== undefined, rule.id);
+    assert.equal(finding.severity, rule.severity, rule.id);
+    assert.equal(finding.priority, priorities[rule.id], rule.id);
+    assert.deepEqual(payload.recommendations.map((item) => [item.id, item.priority]), [[rule.id, priorities[rule.id]]], rule.id);
+    const visibilityFindings = payload.findings.filter((item) => item.kind === "visibility");
+    assert.ok(visibilityFindings.length > 0);
+    assert.ok(visibilityFindings.every((item) => item.severity === "low" && item.priority === "low"));
+  }
+});
+
+test("the report reader rejects announcement ids repeated with different titles or priorities", () => {
+  const snapshot = snapshotFor({ name: "empty", expect: "miss" });
+  const reportId = branded("018f0000-0000-7000-8000-000000000096", isReportId, "report id");
+  const { payload } = assembleReport(snapshot, [], new Set(), reportId, "0.3.0");
+  const announcements = [{ id: "release", priority: "low", title: "Service title" }];
+  assert.equal(isReportPayload({ ...payload, announcements }), true);
+  assert.equal(isReportPayload({ ...payload, announcements: [...announcements, { id: "release", priority: "high", title: "A different service title" }] }), false);
 });

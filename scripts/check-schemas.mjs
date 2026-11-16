@@ -13,6 +13,8 @@ const SCHEMAS = [
   { file: "collector.v1.json", typeName: "CollectorV1", sentToService: false },
   { file: "send_report.v1.json", typeName: "SendReportV1", sentToService: true, maxTextCharacters: 24000 },
   { file: "send_report.v2.json", typeName: "SendReportV2", sentToService: true, maxTextCharacters: 29000 },
+  // WHY: V3 adds ten announcements, each with a 64-character id and a 120-character title: 29000 + 10 * (64 + 120). Priority enums add no free text.
+  { file: "send_report.v3.json", typeName: "SendReportV3", sentToService: true, maxTextCharacters: 30840 },
   { file: "send_feedback.v1.json", typeName: "SendFeedbackV1", sentToService: true, maxTextCharacters: 4100 },
 ];
 
@@ -241,22 +243,26 @@ const checkExamples = (validate, schemaFile, expected) => {
 const domainAgreement = async (loaded) => {
   const { WIRE_PATTERNS, WIRE_LIMITS } = await import(join(repoRoot, "src", "domain", "types.ts"));
   const schema = Object.fromEntries(loaded.map((entry) => [entry.typeName, entry.schema]));
-  const report = schema.SendReportV2;
   const pairs = [
-    ["WIRE_PATTERNS.uuidV7", WIRE_PATTERNS.uuidV7.source, report.$defs.uuidV7.pattern],
+    ...[schema.SendReportV2, schema.SendReportV3].flatMap((report) => [
+      ["WIRE_PATTERNS.uuidV7", WIRE_PATTERNS.uuidV7.source, report.$defs.uuidV7.pattern],
+      ["WIRE_PATTERNS.evidenceId", WIRE_PATTERNS.evidenceId.source, report.$defs.evidenceId.pattern],
+      ["WIRE_PATTERNS.ruleId", WIRE_PATTERNS.ruleId.source, report.$defs.finding.properties.ruleId.pattern],
+      ["WIRE_PATTERNS.recommendationId", WIRE_PATTERNS.recommendationId.source, report.$defs.recommendation.properties.id.pattern],
+      ["WIRE_PATTERNS.timestamp", WIRE_PATTERNS.timestamp.source, report.$defs.timestamp.pattern],
+      ["WIRE_PATTERNS.semver", WIRE_PATTERNS.semver.source, report.$defs.semver.pattern],
+      ["WIRE_LIMITS.summaryCharacters", WIRE_LIMITS.summaryCharacters, report.properties.summary.maxLength],
+      ["WIRE_LIMITS.evidenceTextCharacters", WIRE_LIMITS.evidenceTextCharacters, report.$defs.evidence.properties.text.maxLength],
+      ["WIRE_LIMITS.recommendations", WIRE_LIMITS.recommendations, report.properties.recommendations.maxItems],
+    ]),
     ["WIRE_PATTERNS.uuidV7", WIRE_PATTERNS.uuidV7.source, schema.SendFeedbackV1.$defs.uuidV7.pattern],
-    ["WIRE_PATTERNS.evidenceId", WIRE_PATTERNS.evidenceId.source, report.$defs.evidenceId.pattern],
     ["WIRE_PATTERNS.evidenceId", WIRE_PATTERNS.evidenceId.source, schema.CollectorV1.$defs.evidenceId.pattern],
-    ["WIRE_PATTERNS.ruleId", WIRE_PATTERNS.ruleId.source, report.$defs.finding.properties.ruleId.pattern],
-    ["WIRE_PATTERNS.recommendationId", WIRE_PATTERNS.recommendationId.source, report.$defs.recommendation.properties.id.pattern],
-    ["WIRE_PATTERNS.timestamp", WIRE_PATTERNS.timestamp.source, report.$defs.timestamp.pattern],
     ["WIRE_PATTERNS.timestamp", WIRE_PATTERNS.timestamp.source, schema.CollectorV1.$defs.timestamp.pattern],
-    ["WIRE_PATTERNS.semver", WIRE_PATTERNS.semver.source, report.$defs.semver.pattern],
-    ["WIRE_LIMITS.summaryCharacters", WIRE_LIMITS.summaryCharacters, report.properties.summary.maxLength],
-    ["WIRE_LIMITS.evidenceTextCharacters", WIRE_LIMITS.evidenceTextCharacters, report.$defs.evidence.properties.text.maxLength],
     ["WIRE_LIMITS.evidenceTextCharacters", WIRE_LIMITS.evidenceTextCharacters, schema.CollectorV1.$defs.evidence.properties.text.maxLength],
     ["WIRE_LIMITS.feedbackTextCharacters", WIRE_LIMITS.feedbackTextCharacters, schema.SendFeedbackV1.properties.text.maxLength],
-    ["WIRE_LIMITS.recommendations", WIRE_LIMITS.recommendations, report.properties.recommendations.maxItems],
+    ["WIRE_PATTERNS.announcementId", WIRE_PATTERNS.announcementId.source, schema.SendReportV3.$defs.announcement.properties.id.pattern],
+    ["WIRE_LIMITS.announcements", WIRE_LIMITS.announcements, schema.SendReportV3.properties.announcements.maxItems],
+    ["WIRE_LIMITS.announcementTitleCharacters", WIRE_LIMITS.announcementTitleCharacters, schema.SendReportV3.$defs.announcement.properties.title.maxLength],
   ];
   return {
     compared: pairs.length,
@@ -275,6 +281,13 @@ const REQUIRED_LIMITS = [
   ["send_report.v2.json summary", (s) => s.SendReportV2.properties.summary.maxLength, 1200],
   ["send_report.v2.json evidence text", (s) => s.SendReportV2.$defs.evidence.properties.text.maxLength, 280],
   ["send_report.v2.json recommendations", (s) => s.SendReportV2.properties.recommendations.maxItems, 3],
+  ["send_report.v3.json summary", (s) => s.SendReportV3.properties.summary.maxLength, 1200],
+  ["send_report.v3.json evidence text", (s) => s.SendReportV3.$defs.evidence.properties.text.maxLength, 280],
+  ["send_report.v3.json findings", (s) => s.SendReportV3.properties.findings.maxItems, 20],
+  ["send_report.v3.json recommendations", (s) => s.SendReportV3.properties.recommendations.maxItems, 3],
+  ["send_report.v3.json announcements", (s) => s.SendReportV3.properties.announcements.maxItems, 10],
+  ["send_report.v3.json announcement id", (s) => s.SendReportV3.$defs.announcement.properties.id.maxLength, 64],
+  ["send_report.v3.json announcement title", (s) => s.SendReportV3.$defs.announcement.properties.title.maxLength, 120],
 ];
 
 const run = async (argv) => {

@@ -9,7 +9,7 @@ import { asJsonValue } from "../domain/json-value.ts";
 import { assembleReport, capRecommendations, deriveReportId, findingsFrom, payloadSha256, recommendationsFrom, ruleFinding, withheldRules } from "../domain/report.ts";
 import { RULES, SUPPRESSION_DAYS } from "../domain/rule-pack.ts";
 import { evaluateRules } from "../domain/rules.ts";
-import { collectorProblems, isCollectorDocument, isReportPayload, isReportV1Payload } from "../domain/schema.ts";
+import { collectorProblems, isCollectorDocument, isReportPayload, isReportV1Payload, isReportV2Payload } from "../domain/schema.ts";
 import { addDays, formatTimestamp, parseTimestamp } from "../domain/time.ts";
 import type {
   BaselineId,
@@ -27,13 +27,12 @@ import type {
   ReportBuildInput,
   ReportId,
   ReportMarkInput,
-  SendReportPayload,
+  StoredReportPayload,
   Sha256Hex,
   SnapshotId,
   Timestamp,
 } from "../domain/types.ts";
 import { auditModeOf, isFingerprint, isReportId, isSha256Hex, isSnapshotId, isTimestamp, REPORT_STATES, type ReportState } from "../domain/types.ts";
-import type { SendReportV1 } from "../domain/wire.generated.ts";
 import { baselineIdFrom, entropyHex, snapshotIdFrom } from "../domain/uuid.ts";
 
 type Digest = (text: string) => Sha256Hex;
@@ -159,9 +158,9 @@ const readReport = (db: Db, id: ReportId): StoredReport | null => {
   return row === null ? null : reportFrom(row);
 };
 
-const payloadOf = (text: string): SendReportPayload | SendReportV1 => {
+const payloadOf = (text: string): StoredReportPayload => {
   const parsed = parseStored(text);
-  if (!isReportPayload(parsed) && !isReportV1Payload(parsed)) throw failure("E_DB", "A stored report payload does not match the report schema.", "Run selfcheck and read data.problems.");
+  if (!isReportPayload(parsed) && !isReportV2Payload(parsed) && !isReportV1Payload(parsed)) throw failure("E_DB", "A stored report payload does not match the report schema.", "Run selfcheck and read data.problems.");
   return parsed;
 };
 
@@ -260,7 +259,7 @@ export const buildStoredReport = (
   rng: Rng,
   digest: Digest,
   version: string,
-): { readonly reportId: ReportId; readonly payload: SendReportPayload | SendReportV1; readonly next: DeliveryStep } => {
+): { readonly reportId: ReportId; readonly payload: StoredReportPayload; readonly next: DeliveryStep } => {
   const { snapshotId, reviewRequired } = input;
   const snapshot = readSnapshot(db, snapshotId);
   const nowMs = clock.now().getTime();
@@ -281,7 +280,7 @@ export const buildStoredReport = (
     );
   }
   const hits = evaluateRules(snapshot, RULES);
-  const assembled = assembleReport(snapshot, hits, suppressedFingerprints(db, nowMs), reportId, version);
+  const assembled = assembleReport(snapshot, hits, suppressedFingerprints(db, nowMs), reportId, version, input.announcements);
   const payloadJson = canonicalJson(assembled.payload);
   const report: Report = {
     reportId,

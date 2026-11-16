@@ -4,15 +4,18 @@ import type { RuleHit } from "./rules.ts";
 import { isReportPayload } from "./schema.ts";
 import { addDays, formatTimestamp, parseTimestamp } from "./time.ts";
 import type {
+  Announcement,
   CollectorInput,
   EvidenceId,
   Finding,
+  Priority,
   Recommendation,
   Recommendations,
   ReportEvidence,
   ReportId,
   RuleId,
   SendReportPayload,
+  Severity,
   Sha256Hex,
   VisibilityMap,
   VisibilitySignal,
@@ -21,6 +24,18 @@ import { isEvidenceId, isRecommendationId, isRuleId, isSemVer, WIRE_LIMITS } fro
 import { entropyHex, reportIdFrom } from "./uuid.ts";
 
 const SEVERITY_ORDER = { high: 0, medium: 1, low: 2 } as const;
+
+const priorityOf = (severity: Severity): Priority => severity === "high" ? "high" : "low";
+
+export const selectAnnouncements = (items: readonly Announcement[]): readonly Announcement[] => {
+  const byId = new Map<string, Announcement>();
+  for (const { id, priority, title } of items) {
+    if (!byId.has(id)) byId.set(id, { id, priority, title });
+  }
+  return [...byId.values()]
+    .sort((left, right) => Number(right.priority === "high") - Number(left.priority === "high"))
+    .slice(0, WIRE_LIMITS.announcements);
+};
 
 const SIGNALS: Readonly<Record<VisibilitySignal, { readonly id: string; readonly name: string }>> = {
   transcripts: { id: "visibility-transcripts", name: "conversation text" },
@@ -65,6 +80,7 @@ export const ruleFinding = (item: RuleHit): Finding => ({
   kind: "rule",
   ruleId: item.rule.id,
   severity: item.rule.severity,
+  priority: priorityOf(item.rule.severity),
   evidenceIds: item.evidenceIds,
   summary: item.summary,
   ...(item.withheld ? { withheld: "roleUnknown" as const } : {}),
@@ -77,6 +93,7 @@ const visibilityFindings = (visibility: VisibilityMap): readonly Finding[] =>
       kind: "visibility" as const,
       ruleId: visibilityRuleId(entry.signal),
       severity: "low" as const,
+      priority: "low" as const,
       evidenceIds: [],
       summary: `Not observed: ${SIGNALS[entry.signal].name}. Findings cover only what the bot could see.`,
     }));
@@ -97,7 +114,7 @@ export const recommendationsFrom = (hits: readonly RuleHit[], suppressed: Readon
     if (evidenceIds === null || !isRecommendationId(item.rule.id)) continue;
     ranked.push({
       fingerprint: item.fingerprint,
-      recommendation: { id: item.rule.id, title: item.rule.title, why: item.rule.why, evidenceIds, effort: item.rule.effort },
+      recommendation: { id: item.rule.id, priority: priorityOf(item.rule.severity), title: item.rule.title, why: item.rule.why, evidenceIds, effort: item.rule.effort },
     });
   }
   return ranked.slice(0, WIRE_LIMITS.recommendations);
@@ -163,6 +180,7 @@ export const assembleReport = (
   suppressed: ReadonlySet<string>,
   reportId: ReportId,
   version: string,
+  announcements: readonly Announcement[] = [],
 ): { readonly payload: SendReportPayload; readonly ranked: readonly RankedRecommendation[] } => {
   if (!isSemVer(version)) throw new Error("The module version is not a semantic version.");
   const collected = parseTimestamp(snapshot.collectedAt);
@@ -172,7 +190,7 @@ export const assembleReport = (
   const recommendations = capRecommendations(ranked.map((item) => item.recommendation));
   const visibility = visibilityOf(snapshot);
   const payload: SendReportPayload = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     reportId,
     period: { from: formatTimestamp(addDays(collected, -7)), to: formatTimestamp(collected) },
     accountKind: snapshot.account.kind,
@@ -180,6 +198,7 @@ export const assembleReport = (
     counts: countsOf(snapshot),
     findings,
     recommendations,
+    announcements: selectAnnouncements(announcements),
     evidence: evidenceOf(snapshot, findings, recommendations),
     visibility,
     moduleVersions: { audit: version },

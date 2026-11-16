@@ -1,8 +1,8 @@
 # ambitious-audit
 
-The audit module turns what a bot can see in an account into a snapshot, diffs it against a stored baseline, applies rule-based findings and returns at most three recommendations, each citing its evidence, plus a map of what the bot could not see. A value the bot could not observe is recorded as unknown, never as zero, and no finding is made from it. It is a command-line tool with JSON in and JSON out, one SQLite file and no user interface. The bot shows results in its own pages. A report leaves the computer only when the customer has approved the tool that sends it.
+The audit module turns what a bot can see in an account into a snapshot, diffs it against a stored baseline, applies rule-based findings and returns at most three recommendations, each citing its evidence, plus a map of what the bot could not see. A value the bot could not observe is recorded as unknown, never as zero, and no finding is made from it. It is a command-line tool with JSON in and JSON out, one SQLite file and no user interface. The bot shows results in its own pages. A report leaves the computer only when the owner has approved the tool that sends it and the platform confirms that approval covers the call.
 
-The module follows the shared module contract in [ambitious-kit](https://github.com/AmbitiousBots/ambitious-kit/blob/kit-v0.2.6/MODULE_CONTRACT.md): one binary, a JSON envelope on stdout, one SQLite file, deterministic with `--now` and `--seed`, and no network. Version 0.2.2 uses kit 0.2.6, kept under `vendor/` so a build does not download it.
+The module follows the shared module contract in [ambitious-kit](https://github.com/AmbitiousBots/ambitious-kit/blob/kit-v0.2.6/MODULE_CONTRACT.md): one binary, a JSON envelope on stdout, one SQLite file, deterministic with `--now` and `--seed`, and no network. Version 0.3.0 uses kit 0.2.6, kept under `vendor/` so a build does not download it.
 
 Part of [Ambitious](https://ambitiousbots.com). Licensed under the Apache License, Version 2.0; see [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
@@ -21,19 +21,43 @@ ambitious-audit <command> [--in file] [--db path] [--now ISO8601] [--seed int] [
 | `snapshot` | write | collector document | `{ snapshotId, normalized }` |
 | `baseline set` | write | `{ snapshotId }` | `{ baselineId }` |
 | `diff` | read | `{ from?: baselineId, to: snapshotId }` | `{ changes: [{ path, before, after }] }` |
-| `findings` | read | `{ snapshotId }` | `{ mode, findings: [{ kind, ruleId, severity, evidenceIds, summary, withheld? }] }` |
+| `findings` | read | `{ snapshotId }` | `{ mode, findings: [{ kind, ruleId, severity, priority, evidenceIds, summary, withheld? }] }` |
 | `recommend` | read | `{ snapshotId }` | `{ mode, recommendations, withheld }` with at most 3 recommendations |
-| `report build` | write | `{ snapshotId, reviewRequired }` | `{ reportId, payload, next }` |
+| `report build` | write | `{ snapshotId, reviewRequired, announcements? }` | `{ reportId, payload, next }` |
 | `report mark` | write | `{ reportId, state, at }` | `{ report, next }` |
 | `feedback build` | none | `{ reportId?, text, from }` | `{ payload }` |
 | `schema` | none | no | `{ input, commands, schema }`: the JSON Schema of the collector document, which is the input of `snapshot`. |
 | `schema <command>` | none | no | The same for another command's input, for example `schema report mark`. `commands` lists every name that works here. |
 
-`read` commands open the database with `mode=ro` and never create or change it. `payload` is the `send_report` document in [schemas/send_report.v2.json](schemas/send_report.v2.json). `next` tells the bot what to do with the report: wait for review, send, confirm, or stop.
+`read` commands open the database with `mode=ro` and never create or change it. A newly built `payload` is the `send_report` document in [schemas/send_report.v3.json](schemas/send_report.v3.json). Stored version 1 and version 2 reports remain readable and are returned unchanged. `next` tells the bot what to do with the report: wait for review, send, confirm, or stop.
 
-A report id comes from the snapshot, `--seed` and `--now`. Building the same snapshot again with the same seed and time returns the same id and the stored payload. A report is marked `sent` at most once. When a review is required, `sent` and `failed` are refused until the report is marked `reviewed`. After 3 failed attempts the report stays failed.
+A report id comes from the snapshot, `--seed` and `--now`. Building the same snapshot again with the same seed and time returns the same id and the stored payload, including its original announcements even if a later build supplies a different list. A report is marked `sent` at most once. When a review is required, `sent` and `failed` are refused until the report is marked `reviewed`. After 3 failed attempts the report stays failed.
 
 `diff` with no `from` uses the latest baseline. `diff` of a snapshot with itself is an empty list. `before` or `after` is JSON `null` when that side has no value.
+
+## Priorities and service announcements
+
+Reports have three item kinds: finding, recommendation and announcement, in the `findings`, `recommendations` and `announcements` arrays. Every item has a `priority` of `high` or `low`. The module decides finding and recommendation priorities in code from the rule's severity; the bot does not choose them:
+
+| Source | Finding priority | Recommendation priority |
+|---|---|---|
+| A rule with severity `high` | `high` | `high` |
+| A rule with severity `medium` or `low` | `low` | `low` |
+| A visibility gap | `low` | No recommendation |
+
+There are no rule-specific exceptions. Currently `failing-routine` and `connector-needs-auth` have high priority; all other rules have low priority. The existing finding `severity`, evidence requirements, role-based withholding and limit of three recommendations still apply. The `findings` and `recommend` commands return the same priorities as the report.
+
+Pass the `announcements` array saved from the service's `check_updates` result as the optional `announcements` field of `report build` input. Each service object has `{ id, publishedAt, priority, title, body, url }`. The module copies only `id`, `priority` and `title`; all other fields of each object are ignored. It validates every retained field: `id` is 1 to 64 lowercase letters, digits or hyphens, starting with a letter or digit; `priority` is `high` or `low`; `title` is 1 to 120 characters. A malformed entry rejects the input, including an entry that would otherwise be removed as a duplicate or exceed the output limit.
+
+The module keeps the first occurrence of each id, sorts high priority before low while preserving input order within each priority, and then keeps at most ten announcements. Those three fields are copied verbatim, without trimming or rewriting. An absent field produces `announcements: []`. The module never writes announcement text, never calls `check_updates`, and checks shape rather than authenticating the source. The bot must supply only announcements saved from that service result.
+
+## Daily reports and delivery
+
+Run the snapshot routine daily by default; the owner can pause it. The bot passes saved service announcements to `report build` and shows the three item kinds with their high or low priorities using the audit page skill.
+
+An owner can pre-approve `send_report` once for the daily routine. Before every send, the platform must confirm that approval covers the call; otherwise nothing is sent. `reviewRequired` is a separate choice about whether a person must review each report. When it is true, the bot waits for that review and marks `reviewed` before sending, even if the tool call was pre-approved. Use the stored payload and the same report id for every retry.
+
+`feedback build` accepts feedback with or without a `reportId`. Leave the id out for feedback about the service or organization generally. The bot sends the returned payload through `send_feedback` only with approval that covers that call; a `send_report` approval does not cover feedback.
 
 ## What the bot could not observe
 
@@ -142,7 +166,13 @@ This module adds:
 
 Detail such as the states in a refused transition is in `data`, not in the error object.
 
-## Moving from 0.2.1
+## Moving from 0.2.2 to 0.3.0
+
+- New reports use `send_report.v3`: every finding and recommendation has a priority, and every report has an announcements array. `report build` accepts the optional saved service announcements described above.
+- Stored version 1 and version 2 reports are read and returned unchanged, including on a rebuild of the same report id. Their schema files are unchanged. Collectors and database migrations are unchanged.
+- Daily analysis is the default. The owner can pause the routine and can pre-approve report sends when the platform confirms that approval covers each call.
+
+## Earlier changes: 0.2.1 to 0.2.2
 
 - A collector document accepted by 0.2.0 or 0.2.1 is accepted unchanged and stored exactly as before. Stored snapshots and reports are read as they are, and the report payload is still version 2. Everything new in the collector document is optional.
 - `paused-routine` no longer measures a pause from the last run. It fires only when the routine carries `pausedAt` and that time is more than 7 days before the snapshot. Before, a routine created paused on the day of the snapshot, with a last run of `"never"`, was reported as paused for more than 7 days. A collector that writes no `pausedAt` now gets `paused-routine-since-unknown` instead, at low severity and with no duration, or nothing when the routine was created or run in the last 7 days. To keep the 7-day finding, write `pausedAt` when the account shows it.
@@ -152,13 +182,13 @@ Detail such as the states in a refused transition is in `data`, not in the error
 - A rule file that used `"kind": "routine-state"` with `olderThanDays` is refused; use `"kind": "routine-paused-for"`.
 - The vendored kit moves from 0.2.1 to 0.2.6.
 
-## Moving from 0.2.0
+## Earlier changes: 0.2.0 to 0.2.1
 
 - When the role is unknown, `connector-needs-auth` and `connector-needs-grant` are no longer withheld: `recommend` and `report build` return their recommendations, their findings carry no `withheld` mark, and `recommend` no longer lists them in `withheld`. Before, a bot that did not know its role found connectors that needed a sign-in and gave no advice about them. Nothing changes when the role is known.
 - A connector recommendation needs an evidence line whose `source` is the connector's name, as every recommendation does. A collector that wrote no such line still gets the finding and no recommendation.
 - No schema changes shape. A collector document accepted by 0.2.0 is accepted by 0.2.1, stored snapshots and reports are read as they are, and the report payload is still version 2. One description in the collector schema now mentions the connector advice.
 
-## Moving from 0.1.0
+## Earlier changes: 0.1.0 to 0.2.0
 
 - Collector documents change shape: `usage` is `{ unit, amount7d }` or `null` instead of `{ credits7d }`, routines carry `usage`, and `visibility` has nine entries. `null` in `lastActiveAt` or `lastRunAt` now means not observed; write `"never"` for something that has not happened. A snapshot stored by 0.1.0 is refused with `E_SNAPSHOT_FORMAT`; collect again.
 - `report build` returns a version 2 payload ([schemas/send_report.v2.json](schemas/send_report.v2.json)). It adds `accountKind`, a `kind` on each finding, an optional `withheld` mark, an optional evidence `source`, nullable task and page counts, `needsGrant` and `initializing` connector counts, and the nine-signal visibility map. [schemas/send_report.v1.json](schemas/send_report.v1.json) is kept unchanged for receivers that still hold version 1 reports, and a report built by 0.1.0 is returned as it was stored.
@@ -168,6 +198,7 @@ Detail such as the states in a refused transition is in `data`, not in the error
 
 ```text
 npm ci
+npm audit --audit-level=moderate
 npm run typecheck
 npm run lint
 npm run depcruise
