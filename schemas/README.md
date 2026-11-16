@@ -5,7 +5,7 @@ JSON Schema (draft 2020-12) for the documents that cross the module's boundary.
 | File | What it describes | Who reads it |
 |---|---|---|
 | `collector.v1.json` | What a bot gathered about its account, as input to `snapshot`. | This module. |
-| `send_report.v3.json` | The report summary sent to the monitoring service, with priorities and service announcements. This is what `report build` produces for new reports. | This module and the service. |
+| `send_report.v3.json` | The report summary sent to the monitoring service, with priorities and service announcements. This is what `report build` produces for new reports. Every text field is bounded and there is no field for a transcript. Validation cannot tell whether short text quotes a conversation. | This module and the service. |
 | `send_report.v2.json` | The report summary produced by module versions 0.2.0 through 0.2.2, without priorities or announcements. Kept unchanged for stored version 2 reports. | The service, and this module for reports it stored earlier. |
 | `send_report.v1.json` | The report summary as version 0.1.0 of the module produced it. It cannot say that a count was not observed. Kept unchanged so that stored version 1 reports can still be checked. | The service, and this module for reports it stored earlier. |
 | `send_feedback.v1.json` | Feedback from a customer or their bot, optionally about one report. | This module and the service. |
@@ -16,7 +16,7 @@ The service takes the `send_*` schemas from a tagged release of this repository,
 
 What the schemas hold to, and `npm run check:schemas` checks:
 
-- **No transcripts.** Every string has a maximum length and every list a maximum size. The summary is at most 1200 characters, an evidence text at most 280, a feedback text at most 4000. The check adds up the most free text a payload can carry (28,704 characters for a version 2 report and 30,544 for version 3) and fails if a change raises it past the budget written in `scripts/check-schemas.mjs`.
+- **Bounded text.** Every string has a maximum length and every list a maximum size. The summary is at most 1200 characters, an evidence text at most 280, a feedback text at most 4000. The check adds up the most free text a payload can carry (28,704 characters for a version 2 report and 30,544 for version 3) and fails if a change raises it past the budget written in `scripts/check-schemas.mjs`.
 - **No unknown fields.** Every wire object rejects properties it does not describe. For `report build` input only, the module projects saved service announcements to `id`, `priority` and `title` before validation; other fields of each announcement are ignored.
 - **No organisation in the payload.** No schema has a field for the organisation. The service takes it from the caller's credential and rejects a payload that tries to set it.
 - **At most three recommendations**, each citing at least one evidence id.

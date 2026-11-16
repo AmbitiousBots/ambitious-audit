@@ -378,5 +378,13 @@
   "send_report.v3/invalid/announcement-body-in-payload.json": {
     "keyword": "additionalProperties",
     "at": "/announcements/0"
+  },
+  "send_report.v3/invalid/announcement-id-is-a-number.json": {
+    "keyword": "type",
+    "at": "/announcements/0/id"
+  },
+  "send_report.v3/invalid/announcement-title-is-a-number.json": {
+    "keyword": "type",
+    "at": "/announcements/0/title"
   }
 }
