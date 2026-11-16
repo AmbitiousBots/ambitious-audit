@@ -1,4 +1,5 @@
 import collectorSchema from "../../schemas/collector.v1.json" with { type: "json" };
+import reportSchema from "../../schemas/send_report.v3.json" with { type: "json" };
 import { MARKABLE_STATES, WIRE_LIMITS, WIRE_PATTERNS } from "./types.ts";
 
 const DRAFT = "https://json-schema.org/draft/2020-12/schema";
@@ -34,6 +35,12 @@ export const COMMAND_INPUT_SCHEMAS = {
   "report build": document("report build", "Names the snapshot to report on and says whether a person must review the report before it is sent.", ["snapshotId", "reviewRequired"], {
     snapshotId,
     reviewRequired: { type: "boolean", description: "true when a person must review the report before it is sent." },
+    announcements: {
+      type: "array",
+      maxItems: WIRE_LIMITS.announcements,
+      items: reportSchema.$defs.announcement,
+      description: "Saved check_updates announcements. Before applying this schema, validate every item's id, priority and title, ignore its other fields, keep the first occurrence of each id, sort high before low (preserving order within each priority), and retain at most 10. Leave out for none. Never write or rewrite announcement text.",
+    },
   }),
   "report mark": document("report mark", "Records one step in a report's delivery.", ["reportId", "state", "at"], {
     reportId,

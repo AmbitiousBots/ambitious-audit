@@ -23,6 +23,8 @@ The kit libraries live in `vendor/`. A build does not download them. To move to 
 Run these before you open a pull request:
 
 ```sh
+npm ci
+npm audit --audit-level=moderate
 npm run typecheck
 npm run lint
 npm run depcruise

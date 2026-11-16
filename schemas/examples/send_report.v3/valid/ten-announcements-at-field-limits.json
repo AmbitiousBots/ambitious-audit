@@ -1,0 +1,199 @@
+{
+  "schemaVersion": 3,
+  "reportId": "01a1dc80-f000-73f2-8a1c-9b0d4e5f6a7b",
+  "period": {
+    "from": "2026-11-08T00:00:00Z",
+    "to": "2026-11-15T00:00:00Z"
+  },
+  "accountKind": "owner",
+  "summary": "One routine is failing because a connector needs to be signed in again, and three tasks have gone a week without change. Conversations and the audit log were not visible.",
+  "counts": {
+    "bots": 2,
+    "routines": {
+      "active": 1,
+      "paused": 0,
+      "failing": 1
+    },
+    "connectors": {
+      "ok": 1,
+      "needsAuth": 1,
+      "needsGrant": 0,
+      "initializing": 0,
+      "error": 0
+    },
+    "tasks": {
+      "open": 14,
+      "stale7d": 3,
+      "blocked": 1
+    },
+    "pages": {
+      "count": 22,
+      "updated7d": 5
+    }
+  },
+  "findings": [
+    {
+      "kind": "rule",
+      "ruleId": "failing-routine",
+      "severity": "high",
+      "evidenceIds": [
+        "ev-1"
+      ],
+      "summary": "A weekly routine has been failing since its connector lost access.",
+      "priority": "high"
+    },
+    {
+      "kind": "rule",
+      "ruleId": "stale-tasks",
+      "severity": "low",
+      "evidenceIds": [
+        "ev-2"
+      ],
+      "summary": "Three open tasks have not changed in 7 days.",
+      "priority": "low"
+    },
+    {
+      "kind": "visibility",
+      "ruleId": "visibility-transcripts",
+      "severity": "low",
+      "evidenceIds": [],
+      "summary": "Conversation text was not observed, so this report says nothing about it.",
+      "priority": "low"
+    },
+    {
+      "kind": "visibility",
+      "ruleId": "visibility-audit-log",
+      "severity": "low",
+      "evidenceIds": [],
+      "summary": "The audit log was not observed, so this report says nothing about it.",
+      "priority": "low"
+    }
+  ],
+  "recommendations": [
+    {
+      "id": "reconnect-calendar",
+      "title": "Sign the calendar connector in again",
+      "why": "The Monday routine cannot run until the connector has access.",
+      "evidenceIds": [
+        "ev-1"
+      ],
+      "effort": "small",
+      "priority": "high"
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev-1",
+      "text": "The calendar connector needs to be signed in again.",
+      "source": "routine-2"
+    },
+    {
+      "id": "ev-2",
+      "text": "3 open tasks have not changed in 7 days.",
+      "source": "tasks"
+    }
+  ],
+  "visibility": [
+    {
+      "signal": "transcripts",
+      "seen": false,
+      "why": "The bot has no tool that reads other bots' conversations."
+    },
+    {
+      "signal": "usage",
+      "seen": true,
+      "why": "Read from the account's usage view."
+    },
+    {
+      "signal": "otherBots",
+      "seen": true,
+      "why": "Listed with the account's bot list tool."
+    },
+    {
+      "signal": "auditLog",
+      "seen": false,
+      "why": "The account does not give this bot access to the audit log."
+    },
+    {
+      "signal": "accountRole",
+      "seen": true,
+      "why": "The account's member view shows this bot's role."
+    },
+    {
+      "signal": "tasks",
+      "seen": true,
+      "why": "Read from the task module's output."
+    },
+    {
+      "signal": "pages",
+      "seen": true,
+      "why": "Counted with the page list tool."
+    },
+    {
+      "signal": "botActivity",
+      "seen": true,
+      "why": "Shown in the account's bot list."
+    },
+    {
+      "signal": "routines",
+      "seen": true,
+      "why": "Listed with the routine list tool."
+    }
+  ],
+  "moduleVersions": {
+    "audit": "0.3.0",
+    "tasks": "0.1.0"
+  },
+  "announcements": [
+    {
+      "id": "0aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "priority": "high",
+      "title": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    },
+    {
+      "id": "1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "priority": "high",
+      "title": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    },
+    {
+      "id": "2aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "priority": "high",
+      "title": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    },
+    {
+      "id": "3aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "priority": "high",
+      "title": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    },
+    {
+      "id": "4aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "priority": "high",
+      "title": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    },
+    {
+      "id": "5aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "priority": "low",
+      "title": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    },
+    {
+      "id": "6aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "priority": "low",
+      "title": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    },
+    {
+      "id": "7aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "priority": "low",
+      "title": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    },
+    {
+      "id": "8aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "priority": "low",
+      "title": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    },
+    {
+      "id": "9aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "priority": "low",
+      "title": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    }
+  ]
+}

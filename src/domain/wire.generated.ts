@@ -68,6 +68,30 @@ export type SendReportV2Visibility = readonly SendReportV2VisibilityEntry[];
 
 export type SendReportV2 = { readonly schemaVersion: 2; readonly reportId: SendReportV2UuidV7; readonly period: { readonly from: SendReportV2Timestamp; readonly to: SendReportV2Timestamp }; readonly accountKind: "owner" | "guest" | "team" | "unknown"; readonly summary: string; readonly counts: { readonly bots: number; readonly routines: { readonly active: number; readonly paused: number; readonly failing: number }; readonly connectors: { readonly ok: number; readonly needsAuth: number; readonly needsGrant: number; readonly initializing: number; readonly error: number }; readonly tasks: { readonly open: number | null; readonly stale7d: number | null; readonly blocked: number | null }; readonly pages: { readonly count: number | null; readonly updated7d: number | null } }; readonly findings: readonly SendReportV2Finding[]; readonly recommendations: readonly SendReportV2Recommendation[]; readonly evidence: readonly SendReportV2Evidence[]; readonly visibility: SendReportV2Visibility; readonly moduleVersions: { readonly audit: SendReportV2Semver; readonly [name: string]: SendReportV2Semver } };
 
+export type SendReportV3Timestamp = string;
+
+export type SendReportV3UuidV7 = string;
+
+export type SendReportV3Semver = string;
+
+export type SendReportV3EvidenceId = string;
+
+export type SendReportV3EvidenceIds = readonly SendReportV3EvidenceId[];
+
+export type SendReportV3Finding = { readonly kind: "rule" | "visibility"; readonly ruleId: string; readonly severity: "low" | "medium" | "high"; readonly evidenceIds: SendReportV3EvidenceIds; readonly summary: string; readonly withheld?: "roleUnknown"; readonly priority: "high" | "low" };
+
+export type SendReportV3Recommendation = { readonly id: string; readonly title: string; readonly why: string; readonly evidenceIds: readonly SendReportV3EvidenceId[]; readonly effort: "small" | "medium" | "large"; readonly priority: "high" | "low" };
+
+export type SendReportV3Evidence = { readonly id: SendReportV3EvidenceId; readonly text: string; readonly source?: string };
+
+export type SendReportV3VisibilityEntry = { readonly signal: "transcripts" | "usage" | "otherBots" | "auditLog" | "accountRole" | "tasks" | "pages" | "botActivity" | "routines"; readonly seen: boolean; readonly why: string };
+
+export type SendReportV3Visibility = readonly SendReportV3VisibilityEntry[];
+
+export type SendReportV3Announcement = { readonly id: string; readonly priority: "high" | "low"; readonly title: string };
+
+export type SendReportV3 = { readonly schemaVersion: 3; readonly reportId: SendReportV3UuidV7; readonly period: { readonly from: SendReportV3Timestamp; readonly to: SendReportV3Timestamp }; readonly accountKind: "owner" | "guest" | "team" | "unknown"; readonly summary: string; readonly counts: { readonly bots: number; readonly routines: { readonly active: number; readonly paused: number; readonly failing: number }; readonly connectors: { readonly ok: number; readonly needsAuth: number; readonly needsGrant: number; readonly initializing: number; readonly error: number }; readonly tasks: { readonly open: number | null; readonly stale7d: number | null; readonly blocked: number | null }; readonly pages: { readonly count: number | null; readonly updated7d: number | null } }; readonly findings: readonly SendReportV3Finding[]; readonly recommendations: readonly SendReportV3Recommendation[]; readonly announcements: readonly SendReportV3Announcement[]; readonly evidence: readonly SendReportV3Evidence[]; readonly visibility: SendReportV3Visibility; readonly moduleVersions: { readonly audit: SendReportV3Semver; readonly [name: string]: SendReportV3Semver } };
+
 export type SendFeedbackV1UuidV7 = string;
 
 export type SendFeedbackV1 = { readonly schemaVersion: 1; readonly feedbackId: SendFeedbackV1UuidV7; readonly reportId?: SendFeedbackV1UuidV7; readonly from: "customer" | "bot"; readonly text: string };

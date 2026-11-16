@@ -2,9 +2,12 @@ import type {
   CollectorV1,
   CollectorV1VisibilityEntry,
   SendFeedbackV1,
+  SendReportV1,
   SendReportV2,
-  SendReportV2Finding,
-  SendReportV2Recommendation,
+  SendReportV3,
+  SendReportV3Announcement,
+  SendReportV3Finding,
+  SendReportV3Recommendation,
 } from "./wire.generated.js";
 
 declare const brand: unique symbol;
@@ -28,6 +31,7 @@ export const WIRE_PATTERNS = {
   evidenceId: /^ev-[1-9][0-9]{0,5}$/,
   ruleId: /^[a-z][a-z0-9-]*$/,
   recommendationId: /^[a-z0-9][a-z0-9-]*$/,
+  announcementId: /^[a-z0-9][a-z0-9-]{0,63}$/,
   timestamp: /^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\.[0-9]{1,3})?Z$/,
   semver: /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$/,
 } as const;
@@ -37,6 +41,8 @@ export const WIRE_LIMITS = {
   evidenceTextCharacters: 280,
   feedbackTextCharacters: 4000,
   recommendations: 3,
+  announcements: 10,
+  announcementTitleCharacters: 120,
 } as const;
 
 export const isReportId = (raw: string): raw is ReportId => WIRE_PATTERNS.uuidV7.test(raw);
@@ -73,8 +79,10 @@ export type AuditMode = "full" | "partial";
 
 export const auditModeOf = (snapshot: CollectorInput): AuditMode => (snapshot.account.kind === "unknown" ? "partial" : "full");
 
-export type Severity = SendReportV2Finding["severity"];
-export type Effort = SendReportV2Recommendation["effort"];
+export type Severity = SendReportV3Finding["severity"];
+export type Priority = SendReportV3Finding["priority"];
+export type Announcement = SendReportV3Announcement;
+export type Effort = SendReportV3Recommendation["effort"];
 export type FeedbackSender = SendFeedbackV1["from"];
 
 export type EvidenceIds = readonly EvidenceId[];
@@ -107,9 +115,10 @@ export type Change = {
 };
 
 export type Finding = {
-  readonly kind: SendReportV2Finding["kind"];
+  readonly kind: SendReportV3Finding["kind"];
   readonly ruleId: RuleId;
   readonly severity: Severity;
+  readonly priority: Priority;
   readonly evidenceIds: EvidenceIds;
   readonly summary: string;
   readonly withheld?: "roleUnknown";
@@ -117,6 +126,7 @@ export type Finding = {
 
 export type Recommendation = {
   readonly id: RecommendationId;
+  readonly priority: Priority;
   readonly title: string;
   readonly why: string;
   readonly evidenceIds: CitedEvidenceIds;
@@ -147,14 +157,15 @@ export type ReportEvidence = {
 };
 
 export type SendReportPayload = {
-  readonly schemaVersion: 2;
+  readonly schemaVersion: 3;
   readonly reportId: ReportId;
   readonly period: { readonly from: Timestamp; readonly to: Timestamp };
   readonly accountKind: AccountKind;
   readonly summary: string;
-  readonly counts: SendReportV2["counts"];
+  readonly counts: SendReportV3["counts"];
   readonly findings: readonly Finding[];
   readonly recommendations: Recommendations;
+  readonly announcements: readonly Announcement[];
   readonly evidence: readonly ReportEvidence[];
   readonly visibility: VisibilityMap;
   readonly moduleVersions: { readonly audit: SemVer; readonly [module: string]: SemVer };
@@ -168,7 +179,9 @@ export type SendFeedbackPayload = {
   readonly text: string;
 };
 
-export const sendReportWire = (payload: SendReportPayload): SendReportV2 => payload;
+export type StoredReportPayload = SendReportPayload | SendReportV1 | SendReportV2;
+
+export const sendReportWire = (payload: SendReportPayload): SendReportV3 => payload;
 
 export const sendFeedbackWire = (payload: SendFeedbackPayload): SendFeedbackV1 => payload;
 
@@ -244,8 +257,8 @@ export type FindingsInput = { readonly snapshotId: SnapshotId };
 export type FindingsOutput = { readonly mode: AuditMode; readonly findings: readonly Finding[] };
 export type RecommendInput = { readonly snapshotId: SnapshotId };
 export type RecommendOutput = { readonly mode: AuditMode; readonly recommendations: Recommendations; readonly withheld: readonly RuleId[] };
-export type ReportBuildInput = { readonly snapshotId: SnapshotId; readonly reviewRequired: boolean };
-export type ReportBuildOutput = { readonly reportId: ReportId; readonly payload: SendReportPayload };
+export type ReportBuildInput = { readonly snapshotId: SnapshotId; readonly reviewRequired: boolean; readonly announcements?: readonly Announcement[] };
+export type ReportBuildOutput = { readonly reportId: ReportId; readonly payload: StoredReportPayload };
 export type ReportMarkOutput = { readonly report: Report };
 export type ReportMarkInput = { readonly reportId: ReportId; readonly state: MarkableState; readonly at: Timestamp };
 export type FeedbackBuildInput = { readonly reportId?: ReportId; readonly text: string; readonly from: FeedbackSender };

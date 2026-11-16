@@ -7,10 +7,12 @@ import { test, type TestContext } from "node:test";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import { contractTests } from "@ambitious/kit/contract/contract-tests";
 import { isRecord } from "@ambitious/kit/domain/json";
+import { openDb } from "@ambitious/kit/db/open-db";
+import { sha256Hex } from "../src/db/hash.ts";
 
 const binary = join(import.meta.dirname, "..", "dist", "ambitious-audit.mjs");
 const owner = readFileSync(join(import.meta.dirname, "fixtures", "owner.json"), "utf8");
-const reportSchema = JSON.parse(readFileSync(join(import.meta.dirname, "..", "schemas", "send_report.v2.json"), "utf8"));
+const reportSchema = JSON.parse(readFileSync(join(import.meta.dirname, "..", "schemas", "send_report.v3.json"), "utf8"));
 const ajv = new Ajv2020({ allErrors: true, strict: true });
 const validateReport = ajv.compile(reportSchema);
 
@@ -64,6 +66,8 @@ test("snapshot, diff, recommend and report build follow the limits", (t) => {
   assert.equal(built.exit, 0);
   const payload = dataOf(built.data).payload;
   assert.equal(validateReport(payload), true);
+  assert.equal(dataOf(payload).schemaVersion, 3);
+  assert.deepEqual(dataOf(payload).announcements, []);
   assert.equal(dataOf(built.data).reportId, dataOf(run(home, ["report", "build"], JSON.stringify({ snapshotId, reviewRequired: true })).data).reportId);
   const reportId = dataOf(built.data).reportId;
   assert.equal(typeof reportId, "string");
@@ -239,7 +243,7 @@ test("with an unknown role, three connectors that need a sign-in give one sign-i
   assert.equal(validateReport(payload), true);
   assert.equal(payload.accountKind, "unknown");
   assert.deepEqual(listOf(payload.recommendations).map((item) => item.id), ["connector-needs-auth"]);
-  assert.deepEqual(dataOf(payload.moduleVersions), { audit: "0.2.2" });
+  assert.deepEqual(dataOf(payload.moduleVersions), { audit: "0.3.0" });
 });
 
 test("with an unknown role, a connector that needs a sign-in but has no evidence line gets a finding and no recommendation", (t) => {
@@ -429,4 +433,153 @@ test("schema describes the pause time and usage as shares, so a collector can le
   assert.deepEqual(dataOf(usage.period).enum, ["this_week", "last_7_days", "last_30_days"]);
   const top = dataOf(dataOf(dataOf(run(home, ["schema", "snapshot"]).data).schema).properties);
   assert.ok(isRecord(top.usageOther) && isRecord(top.weeklyLimitUsed));
+});
+
+test("report build copies only service announcement ids, priorities and titles verbatim and preserves that payload on rebuild", (t) => {
+  const home = freshHome(t);
+  const snapshotId = dataOf(run(home, ["snapshot"], fixture("partial.json")).data).snapshotId;
+  const announcements = [
+    { id: "0-release", publishedAt: "2026-11-14T00:00:00Z", priority: "low", title: "  Release notes: café — available  ", body: "Only the service supplies this text.", url: "https://example.com/updates", extra: { ignored: true } },
+    { id: "action-needed", publishedAt: "2026-11-15T00:00:00Z", priority: "high", title: "Read the update\nBefore continuing", body: "A service announcement body.", url: null },
+    { id: "0-release", priority: "high", title: "Later duplicate must not replace the original" },
+  ];
+  const built = run(home, ["report", "build"], JSON.stringify({ snapshotId, reviewRequired: false, announcements }));
+  assert.equal(built.exit, 0, built.stdout);
+  const payload = dataOf(dataOf(built.data).payload);
+  assert.equal(validateReport(payload), true, JSON.stringify(validateReport.errors));
+  assert.deepEqual(payload.announcements, [
+    { id: "action-needed", priority: "high", title: "Read the update\nBefore continuing" },
+    { id: "0-release", priority: "low", title: "  Release notes: café — available  " },
+  ]);
+  assert.deepEqual(listOf(payload.findings).filter((item) => item.kind === "rule").map((item) => [item.ruleId, item.priority]), [
+    ["failing-routine", "high"], ["connector-needs-auth", "high"], ["connector-needs-grant", "low"], ["stale-tasks", "low"],
+  ]);
+  assert.deepEqual(listOf(payload.recommendations).map((item) => [item.id, item.priority]), [
+    ["connector-needs-auth", "high"], ["connector-needs-grant", "low"], ["stale-tasks", "low"],
+  ]);
+  const changedAnnouncements = run(home, ["report", "build"], JSON.stringify({ snapshotId, reviewRequired: false, announcements: [{ id: "new-release", priority: "high", title: "New service title" }] }));
+  assert.equal(changedAnnouncements.exit, 0, changedAnnouncements.stdout);
+  assert.equal(changedAnnouncements.stdout, built.stdout);
+  const omitted = run(home, ["report", "build"], JSON.stringify({ snapshotId, reviewRequired: false }));
+  assert.equal(omitted.stdout, built.stdout);
+});
+
+test("report build deduplicates before sorting high first and keeps the first ten unique announcements", (t) => {
+  const home = freshHome(t);
+  const snapshotId = dataOf(run(home, ["snapshot"], owner).data).snapshotId;
+  const low = Array.from({ length: 12 }, (_, index) => ({ id: `release-${index}`, priority: "low", title: `Service title ${index}` }));
+  const high = [
+    { id: "important-b", priority: "high", title: "First high in service order" },
+    { id: "important-a", priority: "high", title: "Second high in service order" },
+  ];
+  const announcements = [...low, { id: "release-0", priority: "high", title: "Discarded duplicate" }, ...high, high[0]];
+  const built = run(home, ["report", "build"], JSON.stringify({ snapshotId, reviewRequired: false, announcements }));
+  assert.equal(built.exit, 0, built.stdout);
+  const payload = dataOf(dataOf(built.data).payload);
+  assert.equal(validateReport(payload), true);
+  assert.deepEqual(payload.announcements, [...high, ...low.slice(0, 8)]);
+});
+
+test("report build validates every announcement before deduplicating or trimming and reports the invalid input field", (t) => {
+  const home = freshHome(t);
+  const snapshotId = dataOf(run(home, ["snapshot"], owner).data).snapshotId;
+  const valid = { id: "release", priority: "high", title: "Service title" };
+  const cases: readonly { readonly announcements: unknown; readonly pointer: string; readonly rule: string }[] = [
+    { announcements: null, pointer: "/announcements", rule: "type" },
+    { announcements: {}, pointer: "/announcements", rule: "type" },
+    { announcements: [null], pointer: "/announcements/0", rule: "type" },
+    { announcements: ["release"], pointer: "/announcements/0", rule: "type" },
+    { announcements: [[]], pointer: "/announcements/0", rule: "type" },
+    { announcements: [{ priority: "low", title: "Service title" }], pointer: "/announcements/0/id", rule: "required" },
+    { announcements: [{ ...valid, id: "UPPERCASE" }], pointer: "/announcements/0/id", rule: "pattern" },
+    { announcements: [{ ...valid, id: "-starts-with-dash" }], pointer: "/announcements/0/id", rule: "pattern" },
+    { announcements: [{ ...valid, id: "a".repeat(65) }], pointer: "/announcements/0/id", rule: "maxLength" },
+    { announcements: [{ id: "release", title: "Service title" }], pointer: "/announcements/0/priority", rule: "required" },
+    { announcements: [{ ...valid, priority: "medium" }], pointer: "/announcements/0/priority", rule: "enum" },
+    { announcements: [{ id: "release", priority: "high" }], pointer: "/announcements/0/title", rule: "required" },
+    { announcements: [{ ...valid, title: 1 }], pointer: "/announcements/0/title", rule: "type" },
+    { announcements: [{ ...valid, title: "" }], pointer: "/announcements/0/title", rule: "minLength" },
+    { announcements: [{ ...valid, title: "a".repeat(121) }], pointer: "/announcements/0/title", rule: "maxLength" },
+    { announcements: [valid, { ...valid, priority: "medium" }], pointer: "/announcements/1/priority", rule: "enum" },
+    { announcements: [...Array.from({ length: 10 }, (_, index) => ({ ...valid, id: `release-${index}` })), { ...valid, title: "" }], pointer: "/announcements/10/title", rule: "minLength" },
+  ];
+  for (const item of cases) {
+    const built = run(home, ["report", "build"], JSON.stringify({ snapshotId, reviewRequired: false, announcements: item.announcements }));
+    assert.equal(built.exit, 1, built.stdout);
+    assert.ok(errorTexts(built).every((entry) => entry.code === "E_INPUT_SCHEMA"), built.stdout);
+    assert.ok(listOf(dataOf(built.data).fields).some((field) => field.pointer === item.pointer && field.rule === item.rule), built.stdout);
+  }
+  const db = openDb(join(home, "audit", "audit.sqlite"), { readonly: true });
+  try {
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM reports").get()?.count, 0);
+  } finally {
+    db.close();
+  }
+});
+
+test("announcement length boundaries are accepted and ignored service fields are neither interpreted nor stored", (t) => {
+  const home = freshHome(t);
+  const snapshotId = dataOf(run(home, ["snapshot"], owner).data).snapshotId;
+  const kept = { id: "a".repeat(64), priority: "low", title: "😀".repeat(120) };
+  const built = run(home, ["report", "build"], JSON.stringify({ snapshotId, reviewRequired: false, announcements: [{ ...kept, publishedAt: false, body: { discarded: true }, url: 23, another: [null] }] }));
+  assert.equal(built.exit, 0, built.stdout);
+  const payload = dataOf(dataOf(built.data).payload);
+  assert.equal(validateReport(payload), true);
+  assert.deepEqual(payload.announcements, [kept]);
+});
+
+for (const version of [1, 2]) {
+  test(`stored v${version} reports are returned unchanged and can still be reviewed, sent and acknowledged`, (t) => {
+    const home = freshHome(t);
+    const snapshotId = dataOf(run(home, ["snapshot"], owner).data).snapshotId;
+    const built = run(home, ["report", "build"], JSON.stringify({ snapshotId, reviewRequired: false }));
+    assert.equal(built.exit, 0, built.stdout);
+    const reportId = dataOf(built.data).reportId;
+    assert.equal(typeof reportId, "string");
+    if (typeof reportId !== "string") throw new Error("report id");
+    const example: unknown = JSON.parse(readFileSync(join(import.meta.dirname, "..", "schemas", "examples", `send_report.v${version}`, "valid", "weekly-report.json"), "utf8"));
+    const legacyPayload = { ...dataOf(example), reportId };
+    const originalJson = `${JSON.stringify(legacyPayload, null, 2)}\n`;
+    const originalHash = sha256Hex(originalJson);
+    const db = openDb(join(home, "audit", "audit.sqlite"), { readonly: false });
+    try {
+      db.prepare("UPDATE reports SET payload_json = ?, payload_sha256 = ?, fingerprints_json = ? WHERE report_id = ?").run(originalJson, originalHash, "[]", reportId);
+    } finally {
+      db.close();
+    }
+    const input = { snapshotId, reviewRequired: false, announcements: [{ id: "new-release", priority: "high", title: "This title belongs only in new reports" }] };
+    const replayed = run(home, ["report", "build"], JSON.stringify(input));
+    assert.equal(replayed.exit, 0, replayed.stdout);
+    assert.deepEqual(dataOf(replayed.data).payload, legacyPayload);
+    assert.equal(dataOf(dataOf(replayed.data).payload).announcements, undefined);
+    const upgraded = run(home, ["report", "build"], JSON.stringify({ ...input, reviewRequired: true }));
+    assert.equal(upgraded.exit, 0, upgraded.stdout);
+    assert.deepEqual(dataOf(upgraded.data).payload, legacyPayload);
+    for (const state of ["reviewed", "sent", "acked"]) {
+      const marked = run(home, ["report", "mark"], JSON.stringify({ reportId, state, at: "2026-11-15T00:00:00Z" }));
+      assert.equal(marked.exit, 0, marked.stdout);
+      assert.equal(dataOf(dataOf(marked.data).report).payloadSha256, originalHash);
+    }
+    const after = run(home, ["report", "build"], JSON.stringify({ ...input, reviewRequired: true }));
+    assert.equal(after.exit, 0, after.stdout);
+    assert.deepEqual(dataOf(after.data).payload, legacyPayload);
+    const stored = openDb(join(home, "audit", "audit.sqlite"), { readonly: true });
+    try {
+      const row = stored.prepare("SELECT payload_json, payload_sha256 FROM reports WHERE report_id = ?").get(reportId);
+      assert.equal(row?.payload_json, originalJson);
+      assert.equal(row?.payload_sha256, originalHash);
+    } finally {
+      stored.close();
+    }
+  });
+}
+
+test("feedback can be built without a report id", (t) => {
+  const home = freshHome(t);
+  const built = run(home, ["feedback", "build"], JSON.stringify({ text: "The daily schedule is useful.", from: "customer" }));
+  assert.equal(built.exit, 0, built.stdout);
+  const payload = dataOf(dataOf(built.data).payload);
+  assert.equal(payload.schemaVersion, 1);
+  assert.equal(payload.text, "The daily schedule is useful.");
+  assert.equal(Object.hasOwn(payload, "reportId"), false);
 });

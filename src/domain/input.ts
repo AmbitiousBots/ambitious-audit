@@ -1,8 +1,10 @@
+import { isRecord } from "@ambitious/kit/domain/json";
 import { normalizeCollector } from "./canonical.ts";
 import { COMMAND_INPUT_SCHEMAS, type InputCommand } from "./command-inputs.ts";
 import { inputFailure, type FieldProblem } from "./field-problems.ts";
 import { validatorOf } from "./schema.ts";
-import type { BaselineSetInput, CollectorInput, DiffInput, FeedbackBuildInput, FindingsInput, RecommendInput, ReportBuildInput, ReportMarkInput } from "./types.ts";
+import { selectAnnouncements } from "./report.ts";
+import type { Announcement, BaselineSetInput, CollectorInput, DiffInput, FeedbackBuildInput, FindingsInput, RecommendInput, ReportBuildInput, ReportMarkInput } from "./types.ts";
 
 type Inputs = {
   readonly snapshot: CollectorInput;
@@ -35,7 +37,22 @@ export const parseBaselineSet = parserOf("baseline set");
 export const parseDiff = parserOf("diff");
 export const parseFindings = parserOf("findings");
 export const parseRecommend = parserOf("recommend");
-export const parseReportBuild = parserOf("report build");
+const reportBuildDocument = parserOf("report build");
+const announcementValidator = validatorOf(COMMAND_INPUT_SCHEMAS["report build"].properties.announcements.items, "service announcement");
+
+const parseAnnouncement = (raw: unknown, index: number): Announcement => {
+  const projected: unknown = isRecord(raw) ? { id: raw.id, priority: raw.priority, title: raw.title } : raw;
+  const problems = announcementValidator.problems(projected).map((problem) => ({ ...problem, pointer: `/announcements/${index}${problem.pointer}` }));
+  const accepted = (_value: unknown): _value is Announcement => problems.length === 0;
+  if (accepted(projected)) return projected;
+  throw inputFailure(schemaCommand("report build"), problems);
+};
+
+export const parseReportBuild = (raw: unknown): ReportBuildInput => {
+  if (!isRecord(raw) || !Array.isArray(raw.announcements)) return reportBuildDocument(raw);
+  const announcements = raw.announcements.map((item: unknown, index) => parseAnnouncement(item, index));
+  return reportBuildDocument({ ...raw, announcements: selectAnnouncements(announcements) });
+};
 export const parseReportMark = parserOf("report mark");
 
 const feedbackDocument = parserOf("feedback build");
