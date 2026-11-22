@@ -8,7 +8,7 @@
   "bots": [
     {
       "id": "bot-1",
-      "name": "Estimates",
+      "name": "Work queue 1",
       "usage": {
         "unit": "share",
         "period": "last_7_days",
@@ -19,7 +19,7 @@
     },
     {
       "id": "bot-2",
-      "name": "Appointment recalls",
+      "name": "Work queue 2",
       "usage": {
         "unit": "share",
         "period": "last_7_days",
@@ -30,7 +30,7 @@
     },
     {
       "id": "bot-3",
-      "name": "Stock counts",
+      "name": "Work queue 3",
       "usage": {
         "unit": "share",
         "period": "last_7_days",
@@ -41,7 +41,7 @@
     },
     {
       "id": "bot-4",
-      "name": "Order preparation",
+      "name": "Work queue 4",
       "usage": {
         "unit": "share",
         "period": "last_7_days",
@@ -52,7 +52,7 @@
     },
     {
       "id": "bot-5",
-      "name": "Time entries",
+      "name": "Work queue 5",
       "usage": {
         "unit": "share",
         "period": "last_7_days",
@@ -63,7 +63,7 @@
     },
     {
       "id": "bot-6",
-      "name": "Volunteer shifts",
+      "name": "Work queue 6",
       "usage": {
         "unit": "share",
         "period": "last_7_days",
@@ -74,7 +74,7 @@
     },
     {
       "id": "bot-7",
-      "name": "Bookings",
+      "name": "Work queue 7",
       "usage": {
         "unit": "share",
         "period": "last_7_days",
@@ -85,7 +85,7 @@
     },
     {
       "id": "bot-8",
-      "name": "Production checks",
+      "name": "Work queue 8",
       "usage": {
         "unit": "share",
         "period": "last_7_days",
@@ -96,7 +96,7 @@
     },
     {
       "id": "bot-9",
-      "name": "Build checks",
+      "name": "Work queue 9",
       "usage": null,
       "lastActiveAt": null,
       "routineCount": 0
@@ -184,7 +184,7 @@
   "evidence": [],
   "planUsage": {
     "weeklyLimitUsedPercent": 58.5,
-    "extraCreditsLeftUsd": 12.34,
+    "extraCreditsLeftUsd": 0.29,
     "observedAt": "2026-11-15T00:00:00.000Z",
     "period": "this_week"
   }

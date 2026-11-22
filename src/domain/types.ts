@@ -167,6 +167,7 @@ export type SendReportPayload = {
   readonly counts: SendReportV4["counts"];
   readonly bots: SendReportV4["bots"];
   readonly connectors: SendReportV4["connectors"];
+  readonly truncated?: true;
   readonly planUsage: SendReportV4["planUsage"];
   readonly findings: readonly Finding[];
   readonly recommendations: Recommendations;

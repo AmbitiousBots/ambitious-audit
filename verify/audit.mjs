@@ -3,12 +3,17 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { isReportPayload } from "../src/domain/schema.ts";
 import { Ajv2020 } from "ajv/dist/2020.js";
 
 const root = join(import.meta.dirname, "..");
 const binary = join(root, "dist", "ambitious-audit.mjs");
 const owner = readFileSync(join(root, "test", "fixtures", "owner.json"), "utf8");
-const validate = new Ajv2020({ allErrors: true, strict: true }).compile(JSON.parse(readFileSync(join(root, "schemas", "send_report.v4.json"), "utf8")));
+const validateShape = new Ajv2020({ allErrors: true, strict: true }).compile(JSON.parse(readFileSync(join(root, "schemas", "send_report.v4.json"), "utf8")));
+const verifyPayload = (payload) => {
+  assert.ok(validateShape(payload), JSON.stringify(validateShape.errors));
+  assert.ok(isReportPayload(payload), "The report failed the v4 field checks.");
+};
 const home = process.env.AMBITIOUS_HOME;
 if (home === undefined || home === "") {
   process.stderr.write("verify/audit: AMBITIOUS_HOME is not set.\n");
@@ -79,10 +84,7 @@ assert.equal(fail(["report", "build"], JSON.stringify({
   reviewRequired: true,
   announcements: [...announcements, { id: "invalid-after-limit", priority: "high", title: "" }],
 })), 1);
-if (!validate(built.payload)) {
-  process.stderr.write(`verify/audit: payload rejected: ${JSON.stringify(validate.errors)}\n`);
-  process.exit(1);
-}
+verifyPayload(built.payload);
 const again = run(["report", "build"], JSON.stringify({ snapshotId: snapshot.snapshotId, reviewRequired: true, announcements: [] }));
 assert.deepEqual(again.payload, built.payload);
 if (again.reportId !== built.reportId) {
@@ -112,7 +114,7 @@ if (run(["recommend"], JSON.stringify({ snapshotId: unseen.snapshotId })).recomm
 const unseenReport = run(["report", "build"], JSON.stringify({ snapshotId: unseen.snapshotId, reviewRequired: true }));
 assert.deepEqual(unseenReport.payload.announcements, []);
 assert.ok(unseenReport.payload.findings.every((item) => item.priority === "low"));
-if (!validate(unseenReport.payload)) stop(`payload for an unobserved account rejected: ${JSON.stringify(validate.errors)}`);
+verifyPayload(unseenReport.payload);
 if (unseenReport.payload.accountKind !== "unknown" || unseenReport.payload.counts.tasks.open !== null || !unseenReport.payload.summary.includes("role is unknown")) {
   stop("the report for an unobserved account did not say the role is unknown, or wrote a number for a count nobody saw");
 }
@@ -133,7 +135,7 @@ if (refused.status !== 1 || refusal.code !== "E_INPUT_SCHEMA" || !refusal.messag
 const sharesDocument = JSON.parse(readFileSync(join(root, "test", "fixtures", "shares.json"), "utf8"));
 const shares = run(["snapshot"], JSON.stringify(sharesDocument));
 const sharesReport = run(["report", "build"], JSON.stringify({ snapshotId: shares.snapshotId, reviewRequired: false }));
-assert.ok(validate(sharesReport.payload), JSON.stringify(validate.errors));
+verifyPayload(sharesReport.payload);
 assert.ok(sharesReport.payload.recommendations.length > 0);
 assert.ok(sharesReport.payload.recommendations.every((item) => item.priority === "low"));
 const feedback = run(["feedback", "build"], JSON.stringify({ text: "Feedback about the service generally.", from: "customer" }));
@@ -153,6 +155,9 @@ if (fail(["snapshot"], JSON.stringify(sharesDocument)) !== 1) stop("usage was ac
 if (run(["schema"]).schema.$id !== "urn:ambitious:audit:schema:collector:v2") stop("schema did not print the collector schema");
 const v2 = run(["snapshot"], readFileSync(join(root, "schemas/examples/collector.v2/valid/weekly-activity.json"), "utf8"));
 const v4 = run(["report", "build"], JSON.stringify({ snapshotId: v2.snapshotId, reviewRequired: false }));
+verifyPayload(v4.payload);
+assert.equal(v4.payload.planUsage.extraCreditsLeftUsd, 0.29);
+assert.equal(isReportPayload({ ...v4.payload, planUsage: { ...v4.payload.planUsage, extraCreditsLeftUsd: 0.291 } }), false);
 assert.deepEqual(v4.payload, JSON.parse(readFileSync(join(root, "schemas/examples/send_report.v4/valid/weekly-activity.json"), "utf8")));
 assert.deepEqual(run(["schema", "send", "report"]).schema.$id, "urn:ambitious:audit:schema:send_report:v4");
 process.stdout.write(`verify/audit: ok. report ${built.reportId}, ${recommendations.length} recommendation(s)\n`);

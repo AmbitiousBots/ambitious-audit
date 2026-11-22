@@ -1,4 +1,4 @@
-import { wireValidator } from "./wire-validator.ts";
+import { wholeCents, wireValidator } from "./wire-validator.ts";
 import { isRecord } from "@ambitious/kit/domain/json";
 import collectorV1Schema from "../../schemas/collector.v1.json" with { type: "json" };
 import collectorSchema from "../../schemas/collector.v2.json" with { type: "json" };
@@ -92,7 +92,9 @@ export const isCollectorDocument = (raw: unknown): raw is CollectorInput => coll
 
 export const isReportPayload = (raw: unknown): raw is SendReportPayload => {
   const matches = (value: unknown): value is SendReportPayload => report.problems(value).length === 0;
-  return matches(raw) && new Set(raw.announcements.map((item) => item.id)).size === raw.announcements.length;
+  if (!matches(raw)) return false;
+  const balance = raw.planUsage?.extraCreditsLeftUsd;
+  return (balance == null || wholeCents(balance)) && new Set(raw.announcements.map((item) => item.id)).size === raw.announcements.length;
 };
 
 export const isReportV1Payload = (raw: unknown): raw is SendReportV1 => reportV1.problems(raw).length === 0;

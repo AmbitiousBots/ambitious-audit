@@ -4,7 +4,7 @@
   "bots": [
     {
       "lastActiveAt": "2026-11-15T00:00:00.000Z",
-      "name": "Estimates",
+      "name": "Work queue 1",
       "routineCount": 1,
       "usagePeriod": "last_7_days",
       "usageShare": 0.25,
@@ -12,7 +12,7 @@
     },
     {
       "lastActiveAt": null,
-      "name": "Appointment recalls",
+      "name": "Work queue 2",
       "routineCount": 0,
       "usagePeriod": "last_7_days",
       "usageShare": 0.25,
@@ -20,7 +20,7 @@
     },
     {
       "lastActiveAt": null,
-      "name": "Stock counts",
+      "name": "Work queue 3",
       "routineCount": 0,
       "usagePeriod": "last_7_days",
       "usageShare": null,
@@ -28,7 +28,7 @@
     },
     {
       "lastActiveAt": null,
-      "name": "Order preparation",
+      "name": "Work queue 4",
       "routineCount": 0,
       "usagePeriod": "last_7_days",
       "usageShare": null,
@@ -36,7 +36,7 @@
     },
     {
       "lastActiveAt": null,
-      "name": "Time entries",
+      "name": "Work queue 5",
       "routineCount": 0,
       "usagePeriod": "last_7_days",
       "usageShare": null,
@@ -44,7 +44,7 @@
     },
     {
       "lastActiveAt": null,
-      "name": "Volunteer shifts",
+      "name": "Work queue 6",
       "routineCount": 0,
       "usagePeriod": "last_7_days",
       "usageShare": null,
@@ -52,7 +52,7 @@
     },
     {
       "lastActiveAt": null,
-      "name": "Bookings",
+      "name": "Work queue 7",
       "routineCount": 0,
       "usagePeriod": "last_7_days",
       "usageShare": null,
@@ -60,7 +60,7 @@
     },
     {
       "lastActiveAt": null,
-      "name": "Production checks",
+      "name": "Work queue 8",
       "routineCount": 0,
       "usagePeriod": "last_7_days",
       "usageShare": null,
@@ -68,7 +68,7 @@
     },
     {
       "lastActiveAt": null,
-      "name": "Build checks",
+      "name": "Work queue 9",
       "routineCount": 0,
       "usagePeriod": null,
       "usageShare": null,
@@ -144,7 +144,7 @@
       "priority": "low",
       "ruleId": "visibility-usage",
       "severity": "low",
-      "summary": "Partially observed: usage by bot and by routine."
+      "summary": "Partially observed: bot, routine and plan usage."
     },
     {
       "evidenceIds": [],
@@ -179,15 +179,15 @@
     "to": "2026-11-15T00:00:00.000Z"
   },
   "planUsage": {
-    "extraCreditsLeftUsd": 12.34,
+    "extraCreditsLeftUsd": 0.29,
     "observedAt": "2026-11-15T00:00:00.000Z",
     "period": "this_week",
     "weeklyLimitUsedPercent": 58.5
   },
   "recommendations": [],
-  "reportId": "01a1dc80-f000-70e9-abdc-252af78b9616",
+  "reportId": "01a1dc80-f000-78f6-b85a-4bac261b5fe4",
   "schemaVersion": 4,
-  "summary": "1 connector is connected, but this bot has no access to it. 6 bots each accounted for under 1% of usage in the last seven days. Not observed: conversation text, the audit log, page counts. Partially observed: usage by bot and by routine, when each bot was last active.",
+  "summary": "1 connector is connected, but this bot has no access to it. 6 bots each accounted for under 1% of usage in the last seven days. Not observed: conversation text, the audit log, page counts. Partially observed: bot, routine and plan usage, when each bot was last active.",
   "visibility": [
     {
       "seen": false,

@@ -330,6 +330,10 @@
         "$ref": "#/$defs/connector"
       }
     },
+    "truncated": {
+      "const": true,
+      "description": "Present when the byte budget omits bot or connector rows. Counts cover the full snapshot."
+    },
     "planUsage": {
       "type": [
         "object",
@@ -359,7 +363,6 @@
           ],
           "minimum": 0,
           "maximum": 1000000000,
-          "multipleOf": 0.01,
           "description": "Remaining extra credits in USD, to the nearest cent as reported."
         },
         "observedAt": {

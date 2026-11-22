@@ -25,7 +25,7 @@ What the schemas hold to, and `npm run check:schemas` checks:
 - **Priorities and service announcements.** Version 3 requires `high` or `low` on every finding and recommendation, plus an announcements array with at most ten `{ id, priority, title }` objects. Announcement ids are 1 to 64 lowercase letters, digits or hyphens, starting with a letter or digit; titles are 1 to 120 characters. The module copies these values from the saved service input without writing announcement text.
 - **A complete visibility map.** `visibility` has exactly one entry for each signal (nine in the collector document and reports from version 2 onward, four in the version 1 report), each saying whether it was seen and why, so something the bot could not see is never left out.
 - **Observation gaps.** Collector v2 and report v4 accept `"partial"` for a signal with incomplete coverage. Missing task and page counts are nullable from v2 onward. In v4 the three routine state totals and both seven-day run totals can also be null.
-- **Display names.** Copy bot and connector names as the account shows them. Keep tokens, credentials and transcripts out of every field.
+- **Display names.** Collect bot and connector display names from the account. During report construction, a name, evidence source, evidence text or visibility explanation that matches the privacy filter becomes `[redacted]`. Evidence matching uses the original source before redaction.
 - **Report and feedback ids are version 7 UUIDs**, lower case.
 - **Times are UTC**, written `YYYY-MM-DDTHH:MM:SSZ` with optional milliseconds.
 
@@ -33,13 +33,19 @@ The version 3 free-text budget is 30,840 characters, up from the unchanged versi
 
 The version 4 budget is 83,664 characters. It adds 200 bot names at 120 characters, 200 last-active values at 24, 200 connector names at 120 and one plan timestamp at 24. The increase is `200 × (120 + 24) + 200 × 120 + 24 = 52,824`. Adding it to the v3 budget of 30,840 keeps the existing 296-character margin. Period and status enums, numbers and nulls add no free text.
 
-Collector v2 `planUsage` is optional. Its four fields are individually nullable. Percentages are bounded at 100 and extra credits at 1,000,000,000 USD in whole cents. The plan and bot period enums use the same three periods. The report requires the plan object or null. Run totals allow up to 1,000 routines with up to 1,000,000 runs each.
+Collector v2 `planUsage` is optional. Its four fields are individually nullable. Percentages are bounded at 100 and extra credits at 1,000,000,000 USD in whole cents. The v4 JSON Schema checks the numeric range. The producer and verifier also apply `wholeCents` from `src/domain/wire-validator.ts` to every numeric balance. Receivers using the schema on its own must check that rounding to two decimal places preserves the value. The weekly contract example includes 0.29 USD. The plan and bot period enums use the same three periods. The report requires the plan object or null. Run totals allow up to 1,000 routines with up to 1,000,000 runs each.
 
 Patterns are used instead of the `format` keyword, because validators are allowed to ignore `format`.
 
 What a schema cannot say, and the module's code must check: every cited evidence id exists in the evidence list, and `period.from` is not after `period.to`. Version 3 announcements must have unique ids; the module validates every input entry, keeps the first occurrence of each id, sorts high before low with input order preserved within each priority, and keeps at most ten. An absent input array becomes an empty array. A same-id rebuild returns the stored payload unchanged. For the collector document the code also checks that ids are not repeated, that every `null` (and an `unknown` role) is matched by its visibility entry with `seen: false` (or `"partial"` in v2), that a role is named only when `accountRole` was seen, that a percentage is at most 100, that every usage given as a share names the same period, that a period does not start after it ends, and that `usageOther` comes with at least one listed share. The collection table in the [module README](../README.md#what-the-bot-could-not-observe) maps values to signals.
 
 Collector v1 uses `if`, `then` and `else` to distinguish seven-day amounts from period shares. Collector v2 uses `oneOf` to distinguish a seven-day amount, an exact share, a strict upper bound and null. The v4 bot schema pairs each exact share or bound with a period. Its two share fields and period are null together when there is no share reading. The schema checker generates the corresponding TypeScript unions from these branches.
+
+## Serialized report size
+
+The producer budgets 131,072 bytes for a compact UTF-8 MCP `tools/call` request. The [module contract](https://github.com/AmbitiousBots/ambitious-kit/blob/kit-v0.2.6/MODULE_CONTRACT.md) and [service guide](https://ambitiousbots.com/guides/getting-started) give no receiver byte limit. This budget allows 1,024 bytes for the JSON-RPC envelope and 130,048 bytes for the serialized `send_report` arguments, including JSON escaping and punctuation.
+
+If the full payload exceeds 130,048 bytes, the producer adds `truncated: true` and retains prefixes of both lists, alternating bots sorted by id and connectors sorted by name. Counts cover every row in the snapshot. Findings, recommendations and their evidence retain their space. The evidence budget is 30 rows. Each item with evidence gets one citation before the producer fills the remaining rows in rank order and removes citations to omitted rows.
 
 ## Examples
 

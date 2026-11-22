@@ -1,5 +1,8 @@
 import type { Rng } from "@ambitious/kit/domain/clock";
 import { canonicalJson, visibilityOf } from "./canonical.ts";
+import { completeRoutineList, planUsageOf } from "./coverage.ts";
+import { fitReportLists } from "./report-size.ts";
+import { reportText } from "./report-text.ts";
 import type { RuleHit } from "./rules.ts";
 import { isReportPayload } from "./schema.ts";
 import { addDays, formatTimestamp, parseTimestamp } from "./time.ts";
@@ -20,7 +23,7 @@ import type {
   VisibilityMap,
   VisibilitySignal,
 } from "./types.ts";
-import { isEvidenceId, isRecommendationId, isRuleId, isSemVer, WIRE_LIMITS } from "./types.ts";
+import { isRecommendationId, isRuleId, isSemVer, WIRE_LIMITS } from "./types.ts";
 import { entropyHex, reportIdFrom } from "./uuid.ts";
 
 const SEVERITY_ORDER = { high: 0, medium: 1, low: 2 } as const;
@@ -39,7 +42,7 @@ export const selectAnnouncements = (items: readonly Announcement[]): readonly An
 
 const SIGNALS: Readonly<Record<VisibilitySignal, { readonly id: string; readonly name: string }>> = {
   transcripts: { id: "visibility-transcripts", name: "conversation text" },
-  usage: { id: "visibility-usage", name: "usage by bot and by routine" },
+  usage: { id: "visibility-usage", name: "bot, routine and plan usage" },
   otherBots: { id: "visibility-other-bots", name: "other bots" },
   auditLog: { id: "visibility-audit-log", name: "the audit log" },
   accountRole: { id: "visibility-account-role", name: "the account role" },
@@ -98,8 +101,8 @@ const visibilityFindings = (visibility: VisibilityMap): readonly Finding[] =>
       summary: entry.seen === "partial" ? `Partially observed: ${SIGNALS[entry.signal].name}.` : `Not observed: ${SIGNALS[entry.signal].name}. Findings cover only what the bot could see.`,
     }));
 
-export const findingsFrom = (snapshot: CollectorInput, hits: readonly RuleHit[]): readonly Finding[] =>
-  [...orderedHits(hits).map(ruleFinding), ...visibilityFindings(visibilityOf(snapshot))].slice(0, 20);
+export const findingsFrom = (snapshot: CollectorInput, hits: readonly RuleHit[], visibility = visibilityOf(snapshot)): readonly Finding[] =>
+  [...orderedHits(hits).map(ruleFinding), ...visibilityFindings(visibility)].slice(0, 20);
 
 export const withheldRules = (hits: readonly RuleHit[]): readonly RuleId[] =>
   orderedHits(hits)
@@ -137,29 +140,40 @@ const summaryOf = (findings: readonly Finding[], visibility: VisibilityMap, with
   return summary.length <= WIRE_LIMITS.summaryCharacters ? summary : `${summary.slice(0, WIRE_LIMITS.summaryCharacters - 1)}…`;
 };
 
-const evidenceOf = (snapshot: CollectorInput, findings: readonly Finding[], recommendations: readonly Recommendation[]): readonly ReportEvidence[] => {
-  const cited = recommendations.flatMap((item) => item.evidenceIds);
-  const wanted = new Set<string>([...cited, ...findings.flatMap((finding) => finding.evidenceIds)]);
-  const byId = new Map<string, ReportEvidence>();
-  for (const item of snapshot.evidence) {
-    if (!wanted.has(item.id) || !isEvidenceId(item.id) || byId.has(item.id)) continue;
-    byId.set(item.id, { id: item.id, text: item.text, source: item.source });
+const allocateEvidence = (snapshot: CollectorInput, findings: readonly Finding[], ranked: readonly RankedRecommendation[]) => {
+  const available = new Map<string, CollectorInput["evidence"][number]>(snapshot.evidence.map((row) => [row.id, row]));
+  const selected = new Set<EvidenceId>();
+  const items = [...ranked.map((item) => item.recommendation), ...findings];
+  const references = items.map((item) => item.evidenceIds.filter((id) => available.has(id)));
+  // WHY: Reserve one row per cited item before filling the remaining slots in rank order.
+  for (const ids of references) {
+    const first = ids[0];
+    if (first !== undefined) selected.add(first);
   }
-  const rows: ReportEvidence[] = [];
-  for (const id of cited) {
-    const row = byId.get(id);
-    if (row !== undefined && !rows.some((item) => item.id === id)) rows.push(row);
+  for (const ids of references) {
+    for (const id of ids) {
+      if (selected.size < 30) selected.add(id);
+    }
   }
-  for (const item of snapshot.evidence) {
-    if (!byId.has(item.id) || rows.some((row) => row.id === item.id)) continue;
-    const row = byId.get(item.id);
-    if (row !== undefined) rows.push(row);
+
+  const evidence: ReportEvidence[] = [];
+  for (const id of selected) {
+    const row = available.get(id);
+    if (row) evidence.push({ id, text: reportText(row.text), source: reportText(row.source) });
   }
-  return rows.slice(0, 30);
+  const retained = (ids: readonly EvidenceId[]) => ids.filter((id) => selected.has(id));
+  return {
+    findings: findings.map((finding) => ({ ...finding, evidenceIds: retained(finding.evidenceIds) })),
+    ranked: ranked.flatMap(({ fingerprint, recommendation }) => {
+      const evidenceIds = cited(retained(recommendation.evidenceIds));
+      return evidenceIds ? [{ fingerprint, recommendation: { ...recommendation, evidenceIds } }] : [];
+    }),
+    evidence,
+  };
 };
 
 const reportBot = (bot: CollectorInput["bots"][number]): SendReportPayload["bots"][number] => {
-  const row = { name: bot.name, lastActiveAt: bot.lastActiveAt, routineCount: bot.routineCount };
+  const row = { name: reportText(bot.name), lastActiveAt: bot.lastActiveAt, routineCount: bot.routineCount };
   const usage = bot.usage;
   if (usage?.unit === "share") {
     return "share" in usage
@@ -168,28 +182,6 @@ const reportBot = (bot: CollectorInput["bots"][number]): SendReportPayload["bots
   }
   if (usage?.unit === "percent") return { ...row, usageShare: usage.amount7d / 100, usageShareBelow: null, usagePeriod: "last_7_days" };
   return { ...row, usageShare: null, usageShareBelow: null, usagePeriod: null };
-};
-
-const planUsageOf = (snapshot: CollectorInput): SendReportPayload["planUsage"] => {
-  if (snapshot.planUsage !== undefined) return snapshot.planUsage;
-  const legacy = snapshot.weeklyLimitUsed;
-  if (!legacy || legacy.percent > 100) return null;
-  return { weeklyLimitUsedPercent: legacy.percent, extraCreditsLeftUsd: null, observedAt: legacy.asOf, period: "this_week" };
-};
-
-const completeRoutineList = (snapshot: CollectorInput): boolean => {
-  const coverage = snapshot.visibility.find((entry) => entry.signal === "routines")?.seen;
-  if (coverage === true) return true;
-  if (coverage === false && (snapshot.schemaVersion === 2 || !snapshot.routines.length)) return false;
-  if (!snapshot.bots.length || !snapshot.visibility.some((entry) => entry.signal === "otherBots" && entry.seen === true)) return false;
-  // WHY: A partial routines signal can mean only run history is missing. Per-bot inventory can still establish a complete list.
-  const listed = new Map<string, number>();
-  for (const routine of snapshot.routines) listed.set(routine.botId, (listed.get(routine.botId) ?? 0) + 1);
-  for (const bot of snapshot.bots) {
-    if (bot.routineCount !== (listed.get(bot.id) ?? 0)) return false;
-    listed.delete(bot.id);
-  }
-  return listed.size === 0;
 };
 
 const routineCounts = (snapshot: CollectorInput): SendReportPayload["counts"]["routines"] => {
@@ -236,11 +228,10 @@ export const assembleReport = (
   if (!isSemVer(version)) throw new Error("The module version is not a semantic version.");
   const collected = parseTimestamp(snapshot.collectedAt);
   if (collected === null) throw new Error("The snapshot collectedAt is not a UTC timestamp.");
-  const findings = findingsFrom(snapshot, hits);
-  const ranked = recommendationsFrom(hits, suppressed);
-  const recommendations = capRecommendations(ranked.map((item) => item.recommendation));
   const visibility = visibilityOf(snapshot);
-  const payload: SendReportPayload = {
+  const { findings, ranked, evidence } = allocateEvidence(snapshot, findingsFrom(snapshot, hits, visibility), recommendationsFrom(hits, suppressed));
+  const recommendations = capRecommendations(ranked.map((item) => item.recommendation));
+  const payload = fitReportLists({
     schemaVersion: 4,
     reportId,
     period: { from: formatTimestamp(addDays(collected, -7)), to: formatTimestamp(collected) },
@@ -248,17 +239,16 @@ export const assembleReport = (
     summary: summaryOf(findings, visibility, withheldRules(hits).length),
     counts: countsOf(snapshot),
     bots: snapshot.bots.map(reportBot),
-    connectors: snapshot.connectors,
+    connectors: snapshot.connectors.map(({ name, status }) => ({ name: reportText(name), status })),
     planUsage: planUsageOf(snapshot),
     findings,
     recommendations,
     announcements: selectAnnouncements(announcements),
-    evidence: evidenceOf(snapshot, findings, recommendations),
-    visibility,
+    evidence,
+    visibility: visibility.map((entry) => ({ ...entry, why: reportText(entry.why) })),
     moduleVersions: { audit: version },
-  };
-  const problems = isReportPayload(payload) ? [] : ["The report payload does not match send_report."];
-  if (problems.length > 0) throw new Error(problems[0]);
+  });
+  if (!isReportPayload(payload)) throw new Error("The report payload does not match send_report.");
   return { payload, ranked };
 };
 

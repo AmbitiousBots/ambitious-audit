@@ -26,6 +26,7 @@ const base: unknown = JSON.parse(
     ],
     tasks: { closed7d: 0, open: 4, stale7d: 2, blocked: 1 },
     pages: { count: 3, updated7d: 1 },
+    planUsage: { weeklyLimitUsedPercent: 0, extraCreditsLeftUsd: 0, observedAt: "2026-11-15T00:00:00Z", period: "this_week" },
     visibility: ["transcripts", "usage", "otherBots", "auditLog", "accountRole", "tasks", "pages", "botActivity", "routines"].map((signal) => ({ signal, seen: true, why: "Read with the bot's own tools." })),
     evidence: [
       { id: "ev-1", kind: "excerpt", text: "Never active.", source: "bot-1" },
@@ -59,6 +60,7 @@ const GROUPS: readonly Group[] = [
     signal: "usage",
     rules: [],
     hide: (document) => {
+      delete document.planUsage;
       document.bots = each(document.bots, (bot) => ({ ...bot, usage: null }));
       document.routines = each(document.routines, (routine) => ({ ...routine, usage: null }));
     },
@@ -91,7 +93,9 @@ test("for every combination of unobserved groups, rules fire only on observed va
     const blind = new Set(hidden.flatMap((group) => group.rules));
     const expected = [...ALWAYS, ...GROUPS.flatMap((group) => group.rules)].filter((rule) => !blind.has(rule)).sort();
     assert.deepEqual(findings.filter((finding) => finding.kind === "rule").map((finding) => String(finding.ruleId)).sort(), expected, label);
-    assert.equal(findings.filter((finding) => finding.kind === "visibility").length, hidden.length, label);
+    const gaps = new Set(hidden.map((group) => group.signal));
+    if (gaps.has("routines")) gaps.add("usage");
+    assert.equal(findings.filter((finding) => finding.kind === "visibility").length, gaps.size, label);
     const roleUnknown = hidden.some((group) => group.signal === "accountRole");
     for (const finding of findings.filter((item) => item.kind === "rule")) {
       assert.equal(finding.withheld, roleUnknown && !GIVEN_IN_ANY_MODE.includes(String(finding.ruleId)) ? "roleUnknown" : undefined, `${label}: ${finding.ruleId}`);

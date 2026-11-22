@@ -62,7 +62,7 @@ An owner can pre-approve `send_report` once for the daily routine. Before every 
 
 ## What the bot could not observe
 
-Use [collector v2](schemas/collector.v2.json) for new snapshots. `snapshot` also accepts collector v1. Take bot and connector display names from the account tools. Keep tokens, credentials and transcripts out of every field, including names and evidence.
+Use [collector v2](schemas/collector.v2.json) for new snapshots. `snapshot` also accepts collector v1. Take bot and connector display names from the account tools. The report replaces a name, evidence source, evidence text or visibility explanation containing an email address, phone number, credentialed URL, URL query or token-like string with `[redacted]`. The record keeps its other fields. Keep credentials and transcripts out of collector input.
 
 Each visibility entry has a `signal`, a `seen` value and a short `why`. Use `true` when the tool covered the signal, `false` when it returned nothing for it, and `"partial"` when it covered part of the signal. Describe what was missing. Include one entry for each of `transcripts`, `usage`, `otherBots`, `auditLog`, `accountRole`, `tasks`, `pages`, `botActivity` and `routines`. Gaps produce visibility findings.
 
@@ -91,7 +91,11 @@ Each share carries its `usagePeriod`, one of `this_week`, `last_7_days` or `last
 
 When the platform provides plan figures, collect `planUsage` with `weeklyLimitUsedPercent` (0–100), `extraCreditsLeftUsd` (whole cents), `observedAt` (UTC) and `period`. Use null for each missing value. Omit the object when the tool provides no plan reading. For older snapshots, a `weeklyLimitUsed` percentage within 0–100 supplies the percentage, observation time and current-week period. A legacy percentage above 100 cannot be represented in v4.
 
-The v4 payload lists up to 200 bots with display name, exact share or upper bound, period, last activity and routine count. It lists up to 200 connectors with display name and status. `counts.tasks.closed7d` records seven-day closures. `counts.routines` gives active, paused and failing totals, plus `runs7d` and `failedRuns7d`. An observed empty routine list yields zero. An unseen inventory yields null totals. A partially observed inventory yields null totals unless every bot’s known routine count reconciles with its listed routines and the bot list is complete. Each run total also requires that measure on every listed routine.
+Full usage coverage requires exact shares across the bot inventory, usage for every routine, and both plan figures with their observation time and period.
+
+The v4 payload lists up to 200 bots with display name, exact share or upper bound, period, last activity and routine count. It lists up to 200 connectors with display name and status. `counts.tasks.closed7d` records seven-day closures. `counts.routines` gives active, paused and failing totals, plus `runs7d` and `failedRuns7d`. A per-bot count that disagrees with the list makes all five routine totals null and coverage partial. An observed empty routine list consistent with all known counts yields zero. An unseen inventory yields null totals. A partially observed inventory yields null totals unless every bot’s known routine count reconciles with its listed routines and the bot list is complete. Each run total also requires that measure on every listed routine.
+
+When the serialized report exceeds its byte budget, `truncated: true` marks shortened bot or connector lists. Counts still cover the full snapshot. See the [report size budget](schemas/README.md#serialized-report-size).
 
 ### When the role is unknown
 
@@ -118,7 +122,7 @@ Rules live in `rules/*.json`. Each one has a positive fixture and a negative fix
 | `paused-routine` | A routine is paused, and its `pausedAt` is more than 7 days before the snapshot. | yes |
 | `paused-routine-since-unknown` | A routine is paused, the document gives no `pausedAt`, and the routine was neither created nor run in the 7 days before the snapshot. Severity is low, and the finding names no duration. | yes |
 | `bot-unused` | A bot's last activity is `"never"` or more than 14 days before the snapshot, or its last activity was not observed and it is listed with a share of 0 for the last 30 days. Never when its usage shows use within the last 14 days. | yes |
-| `bots-barely-used` | At least three bots each accounted for under 1% of usage over `last_7_days`, by exact share, upper bound or seven-day percentage. Priority is low and effort is small. | yes |
+| `bots-barely-used` | At least three bots each accounted for under 1% of usage over `last_7_days`, by exact share, upper bound or seven-day percentage. A dated share must overlap the seven days ending at the snapshot. Priority is low and effort is small. | yes |
 | `stale-tasks` | The count of tasks with no change in 7 days is greater than the threshold in the rule file. | no |
 | `duplicate-routines` | Two routines on the same bot share a schedule. | yes |
 

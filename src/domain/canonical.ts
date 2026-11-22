@@ -1,4 +1,5 @@
 import { isRecord } from "@ambitious/kit/domain/json";
+import { reportCoverage, usageCoverage } from "./coverage.ts";
 import { pointerOf, refuseProblems, type FieldProblem } from "./field-problems.ts";
 import { VISIBILITY_SIGNALS, type CollectorInput, type VisibilityEntry, type VisibilityMap, type VisibilitySignal } from "./types.ts";
 import { parseTimestamp } from "./time.ts";
@@ -57,42 +58,8 @@ const orderedVisibility = (input: CollectorInput): VisibilityMap =>
     (entry): VisibilityEntry => ({ signal: entry.signal, seen: entry.seen, why: entry.why }),
   );
 
-const usageCoverage = (input: CollectorInput, entry: VisibilityEntry): VisibilityEntry => {
-  if (entry.seen === "partial") return entry;
-  const bounded = input.bots.some((bot) => bot.usage !== null && "shareBelow" in bot.usage);
-  if (bounded) return { ...entry, seen: "partial", why: "The usage report gives an upper bound for some bot shares." };
-  const hasReading = input.bots.some((bot) => bot.usage !== null) || input.routines.some((routine) => routine.usage !== null) ||
-    input.weeklyLimitUsed !== undefined || (input.planUsage !== undefined && Object.values(input.planUsage).some((value) => value !== null));
-  if (!hasReading) return entry;
-  if (entry.seen === false) return { ...entry, seen: "partial" };
-  if (input.routines.length === 0 && input.visibility.some((item) => item.signal === "routines" && item.seen !== true)) {
-    return { ...entry, seen: "partial", why: "Usage was reported, but routine usage coverage is unknown." };
-  }
-  return entry;
-};
-
 export const visibilityOf = (input: CollectorInput): VisibilityMap =>
-  orderedVisibility(input).map((entry) => {
-    if (entry.signal === "usage") {
-      const coverage = usageCoverage(input, entry);
-      if (coverage.seen !== true) return coverage;
-      if (input.bots.some((bot) => bot.usage?.unit === "credits")) {
-        return { ...entry, seen: "partial", why: "Some bots have credit readings without a share of account usage." };
-      }
-      if (input.weeklyLimitUsed !== undefined && input.planUsage === undefined) {
-        return { ...entry, seen: "partial", why: "The legacy weekly reading omits the extra credit balance." };
-      }
-      return entry;
-    }
-    if (entry.seen !== true) return entry;
-    if (entry.signal === "tasks" && input.tasks.closed7d === undefined) {
-      return { ...entry, seen: "partial", why: "Task counts were reported without closures for the last seven days." };
-    }
-    if (entry.signal === "routines" && input.routines.some((routine) => routine.runs7d === undefined || routine.failedRuns7d === undefined)) {
-      return { ...entry, seen: "partial", why: "The routine list was observed. Seven-day run or failure counts are missing." };
-    }
-    return entry;
-  });
+  orderedVisibility(input).map((entry) => reportCoverage(input, entry));
 
 export const notObserved = (input: CollectorInput): Readonly<Record<Exclude<VisibilitySignal, "transcripts" | "otherBots" | "auditLog">, readonly string[]>> => {
   const where = (found: readonly (string | null)[]): readonly string[] => found.flatMap((pointer) => (pointer === null ? [] : [pointer]));

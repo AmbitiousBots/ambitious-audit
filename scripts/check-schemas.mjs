@@ -81,7 +81,7 @@ const oneOfForms = (node) => {
       const base = properties[key];
       if (!base) return { problem: true };
       if (limit === true) continue;
-      if (limit === false) delete properties[key];
+      if (limit === false) properties[key] = false;
       else if (limit === null || typeof limit !== "object") return { problem: true };
       else if (sameMembers(Object.keys(limit), ["enum"]) && Array.isArray(limit.enum) && limit.enum.every((value) => base.enum?.includes(value))) properties[key] = limit;
       else if (sameMembers(Object.keys(limit), ["type"]) && typesOf(base).includes(limit.type)) properties[key] = { ...base, type: limit.type };
@@ -196,6 +196,7 @@ const textBound = (root, node) => {
 const literal = (value) => JSON.stringify(value);
 
 const typeOf = (root, typeName, node) => {
+  if (node === false) return "never";
   if (node.$ref !== undefined) return `${typeName}${pascal(node.$ref.split("/").at(-1))}`;
   if (node.const !== undefined) return literal(node.const);
   if (node.enum !== undefined) return node.enum.map(literal).join(" | ");
