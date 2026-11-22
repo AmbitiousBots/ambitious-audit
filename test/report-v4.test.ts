@@ -215,11 +215,16 @@ test("only gated display names reach the assembled report from collector text", 
     "refresh-token", "access_token", "Bearer Services", "Token Studio", "key 42", "key12", "API-Key",
     "Repair Desk (123) 456", "Studio 7 / Suite 42", "Device AB12", "Fullwidth ＠ sample",
     "Scope {sample}", "Quoted \"sample\"", "Mixed🔒name", "Tab\tName", "Trailing newline\n",
+    "Basic Yjplcmlj", "Yjplcmlj", "Desk-Yjplcmlj", "YTpzYW1wbGU", "YTpzYW1wbGVzIQ",
+    "desk at example dot invalid", "desk AT DOT invalid", "desk at example dot", "desk (at) example (dot) invalid",
+    "desk dot mail at example", "Desk B2B", "3D B2B", "3DAB Printing", "12D Printing",
   ];
   const keep = [
     "Authentic Catering", "Author Services", "Cookie Bakery", "Basic Bookkeeping", "Basic Operations", "Digest Printing",
     "Dental Care", "Tool & Die", "Market 24", "Food Pantry", "Software Support", "Neighborhood Salon", "Café Services",
     "O’Brien Plumbing", "हिन्दी सेवा", "Maker's Co-op",
+    "3D Printing", "B2B Services", "Dot Matrix", "Service at Home",
+    btoa("sample"), btoa("b:sub\x01"), btoa("abc\x98:d"), "YjplcmljA",
   ];
   const build = (value: string) => report({
     ...weekly, bots: weekly.bots.map((bot) => ({ ...bot, name: value })),

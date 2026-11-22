@@ -62,7 +62,7 @@ An owner can pre-approve `send_report` once for the daily routine. Before every 
 
 ## What the bot could not observe
 
-Use collector v2 for new snapshots. Copy bot and connector display names from the account tools. The report accepts normalized names up to 40 characters. A withheld name appears as `Bot N` or `Connector N` with `nameWithheld: true`. Keep credentials and transcripts out of collector input. [Collector schema](schemas/collector.v2.json) · [Display name rules](schemas/README.md#collector-text-in-reports)
+Use collector v2 for new snapshots. Keep credentials and transcripts out of collector input. Copy bot and connector display names as the platform shows them. The report forwards each name after normalization and a 40-character display-name check. The check withholds credential-like strings and spelled-out addresses. A withheld name appears as `Bot N` or `Connector N` with `nameWithheld: true`. Display names are the only collector free text the report forwards. The remaining disclosure risk is what an owner types into a name that passes the check. [Collector schema](schemas/collector.v2.json) · [Display name rules](schemas/README.md#collector-text-in-reports)
 
 Each visibility entry has a `signal` and a `seen` value. Use `true` for complete coverage, `false` for no observation and `"partial"` for incomplete coverage. Set `scope` to `all`, `shared_only` or `limited` when the tool identifies its access scope. Include one entry for each of `transcripts`, `usage`, `otherBots`, `auditLog`, `accountRole`, `tasks`, `pages`, `botActivity` and `routines`. Gaps produce visibility findings. The report explains coverage using readings and scope.
 
