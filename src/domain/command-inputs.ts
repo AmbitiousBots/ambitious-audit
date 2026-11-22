@@ -1,5 +1,5 @@
-import collectorSchema from "../../schemas/collector.v1.json" with { type: "json" };
-import reportSchema from "../../schemas/send_report.v3.json" with { type: "json" };
+import collectorSchema from "../../schemas/collector.v2.json" with { type: "json" };
+import reportSchema from "../../schemas/send_report.v4.json" with { type: "json" };
 import { MARKABLE_STATES, WIRE_LIMITS, WIRE_PATTERNS } from "./types.ts";
 
 const DRAFT = "https://json-schema.org/draft/2020-12/schema";

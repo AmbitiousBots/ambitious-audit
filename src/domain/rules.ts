@@ -1,7 +1,7 @@
 import { isRecord } from "@ambitious/kit/domain/json";
 import { observedInstant, olderThanDays, parseTimestamp, withinDays } from "./time.ts";
 import type { CollectorInput, Effort, EvidenceId, EvidenceIds, Fingerprint, RuleId, Severity } from "./types.ts";
-import type { CollectorV1Bot, CollectorV1BotUsage, CollectorV1Routine } from "./wire.generated.ts";
+import type { CollectorV2Bot, CollectorV2BotUsage, CollectorV2Routine } from "./wire.generated.ts";
 import { isEvidenceId, isFingerprint, isRecommendationId, isRuleId } from "./types.ts";
 
 type CountText = { readonly one: string; readonly many: string };
@@ -12,6 +12,7 @@ type RuleWhen =
   | { readonly kind: "routine-paused-since-unknown"; readonly unlessCreatedOrRunWithinDays: number }
   | { readonly kind: "connector-status"; readonly status: "needsAuth" | "needsGrant" }
   | { readonly kind: "bot-unused"; readonly olderThanDays: number }
+  | { readonly kind: "bots-barely-used"; readonly minimumBots: number }
   | { readonly kind: "stale-tasks"; readonly moreThan: number }
   | { readonly kind: "duplicate-routines" };
 
@@ -72,6 +73,7 @@ const parseWhen = (value: unknown): RuleWhen => {
     return { kind: "connector-status", status };
   }
   if (kind === "bot-unused") return { kind: "bot-unused", olderThanDays: wholeNumber(value.olderThanDays, "when.olderThanDays") };
+  if (kind === "bots-barely-used") return { kind, minimumBots: wholeNumber(value.minimumBots, "when.minimumBots") };
   if (kind === "stale-tasks") return { kind: "stale-tasks", moreThan: wholeNumber(value.moreThan, "when.moreThan") };
   if (kind === "duplicate-routines") return { kind: "duplicate-routines" };
   return brokenRule("when.kind");
@@ -133,10 +135,10 @@ const hit = (rule: RuleDefinition, snapshot: CollectorInput, subjects: readonly 
   };
 };
 
-const pausedLongerThan = (routine: CollectorV1Routine, collected: number, days: number): boolean =>
+const pausedLongerThan = (routine: CollectorV2Routine, collected: number, days: number): boolean =>
   routine.state === "paused" && routine.pausedAt !== undefined && olderThanDays(collected, observedInstant(routine.pausedAt), days);
 
-const pausedSinceUnknown = (routine: CollectorV1Routine, collected: number, days: number): boolean =>
+const pausedSinceUnknown = (routine: CollectorV2Routine, collected: number, days: number): boolean =>
   routine.state === "paused" &&
   routine.pausedAt === undefined &&
   !withinDays(collected, observedInstant(routine.createdAt ?? null), days) &&
@@ -150,18 +152,24 @@ const SHARE_PERIOD_DAYS = {
   last_30_days: { coversAtLeastDays: 30, coversAtMostDays: 30 },
 } as const;
 
-const usageReading = (usage: CollectorV1BotUsage): UsageReading | null => {
+const usageReading = (usage: CollectorV2BotUsage): UsageReading | null => {
   if (usage === null) return null;
-  if (usage.unit === "share") return { used: usage.share > 0, ...SHARE_PERIOD_DAYS[usage.period] };
+  if (usage.unit === "share") return "share" in usage ? { used: usage.share > 0, ...SHARE_PERIOD_DAYS[usage.period] } : null;
   return { used: usage.amount7d > 0, coversAtLeastDays: 7, coversAtMostDays: 7 };
 };
 
-const botUnused = (bot: CollectorV1Bot, collected: number, days: number): boolean => {
+const botUnused = (bot: CollectorV2Bot, collected: number, days: number): boolean => {
   const usage = usageReading(bot.usage);
   if (usage !== null && usage.used && usage.coversAtMostDays <= days) return false;
   const lastActive = observedInstant(bot.lastActiveAt);
   if (lastActive.known) return olderThanDays(collected, lastActive, days);
   return usage !== null && !usage.used && usage.coversAtLeastDays >= days;
+};
+
+const belowOnePercentLastWeek = ({ usage }: CollectorV2Bot): boolean => {
+  if (usage?.unit === "percent") return usage.amount7d < 1;
+  if (usage?.unit !== "share" || usage.period !== "last_7_days") return false;
+  return "share" in usage ? usage.share < 0.01 : usage.shareBelow <= 0.01;
 };
 
 const subjectsOf = (rule: RuleDefinition, snapshot: CollectorInput): { readonly subjects: readonly string[]; readonly evidenceKeys: readonly string[] } | null => {
@@ -186,6 +194,10 @@ const subjectsOf = (rule: RuleDefinition, snapshot: CollectorInput): { readonly 
   if (when.kind === "bot-unused") {
     const subjects = snapshot.bots.filter((bot) => botUnused(bot, collected, when.olderThanDays)).map((bot) => bot.id);
     return { subjects, evidenceKeys: subjects };
+  }
+  if (when.kind === "bots-barely-used") {
+    const subjects = snapshot.bots.filter(belowOnePercentLastWeek).map((bot) => bot.id);
+    return subjects.length >= when.minimumBots ? { subjects, evidenceKeys: subjects } : null;
   }
   if (when.kind === "stale-tasks") {
     const stale = snapshot.tasks.stale7d;

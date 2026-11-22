@@ -1,0 +1,238 @@
+{
+  "accountKind": "owner",
+  "announcements": [],
+  "bots": [
+    {
+      "lastActiveAt": "2026-11-15T00:00:00.000Z",
+      "name": "Estimates",
+      "routineCount": 1,
+      "usagePeriod": "last_7_days",
+      "usageShare": 0.25,
+      "usageShareBelow": null
+    },
+    {
+      "lastActiveAt": null,
+      "name": "Appointment recalls",
+      "routineCount": 0,
+      "usagePeriod": "last_7_days",
+      "usageShare": 0.25,
+      "usageShareBelow": null
+    },
+    {
+      "lastActiveAt": null,
+      "name": "Stock counts",
+      "routineCount": 0,
+      "usagePeriod": "last_7_days",
+      "usageShare": null,
+      "usageShareBelow": 0.01
+    },
+    {
+      "lastActiveAt": null,
+      "name": "Order preparation",
+      "routineCount": 0,
+      "usagePeriod": "last_7_days",
+      "usageShare": null,
+      "usageShareBelow": 0.01
+    },
+    {
+      "lastActiveAt": null,
+      "name": "Time entries",
+      "routineCount": 0,
+      "usagePeriod": "last_7_days",
+      "usageShare": null,
+      "usageShareBelow": 0.01
+    },
+    {
+      "lastActiveAt": null,
+      "name": "Volunteer shifts",
+      "routineCount": 0,
+      "usagePeriod": "last_7_days",
+      "usageShare": null,
+      "usageShareBelow": 0.01
+    },
+    {
+      "lastActiveAt": null,
+      "name": "Bookings",
+      "routineCount": 0,
+      "usagePeriod": "last_7_days",
+      "usageShare": null,
+      "usageShareBelow": 0.01
+    },
+    {
+      "lastActiveAt": null,
+      "name": "Production checks",
+      "routineCount": 0,
+      "usagePeriod": "last_7_days",
+      "usageShare": null,
+      "usageShareBelow": 0.01
+    },
+    {
+      "lastActiveAt": null,
+      "name": "Build checks",
+      "routineCount": 0,
+      "usagePeriod": null,
+      "usageShare": null,
+      "usageShareBelow": null
+    }
+  ],
+  "connectors": [
+    {
+      "name": "Calendar",
+      "status": "ok"
+    },
+    {
+      "name": "Documents",
+      "status": "needsGrant"
+    }
+  ],
+  "counts": {
+    "bots": 9,
+    "connectors": {
+      "error": 0,
+      "initializing": 0,
+      "needsAuth": 0,
+      "needsGrant": 1,
+      "ok": 1
+    },
+    "pages": {
+      "count": null,
+      "updated7d": null
+    },
+    "routines": {
+      "active": 1,
+      "failedRuns7d": 0,
+      "failing": 0,
+      "paused": 0,
+      "runs7d": 6
+    },
+    "tasks": {
+      "blocked": 1,
+      "closed7d": 3,
+      "open": 4,
+      "stale7d": 0
+    }
+  },
+  "evidence": [],
+  "findings": [
+    {
+      "evidenceIds": [],
+      "kind": "rule",
+      "priority": "low",
+      "ruleId": "connector-needs-grant",
+      "severity": "medium",
+      "summary": "1 connector is connected, but this bot has no access to it."
+    },
+    {
+      "evidenceIds": [],
+      "kind": "rule",
+      "priority": "low",
+      "ruleId": "bots-barely-used",
+      "severity": "low",
+      "summary": "6 bots each accounted for under 1% of usage in the last seven days."
+    },
+    {
+      "evidenceIds": [],
+      "kind": "visibility",
+      "priority": "low",
+      "ruleId": "visibility-transcripts",
+      "severity": "low",
+      "summary": "Not observed: conversation text. Findings cover only what the bot could see."
+    },
+    {
+      "evidenceIds": [],
+      "kind": "visibility",
+      "priority": "low",
+      "ruleId": "visibility-usage",
+      "severity": "low",
+      "summary": "Partially observed: usage by bot and by routine."
+    },
+    {
+      "evidenceIds": [],
+      "kind": "visibility",
+      "priority": "low",
+      "ruleId": "visibility-audit-log",
+      "severity": "low",
+      "summary": "Not observed: the audit log. Findings cover only what the bot could see."
+    },
+    {
+      "evidenceIds": [],
+      "kind": "visibility",
+      "priority": "low",
+      "ruleId": "visibility-pages",
+      "severity": "low",
+      "summary": "Not observed: page counts. Findings cover only what the bot could see."
+    },
+    {
+      "evidenceIds": [],
+      "kind": "visibility",
+      "priority": "low",
+      "ruleId": "visibility-bot-activity",
+      "severity": "low",
+      "summary": "Partially observed: when each bot was last active."
+    }
+  ],
+  "moduleVersions": {
+    "audit": "0.4.0"
+  },
+  "period": {
+    "from": "2026-11-08T00:00:00.000Z",
+    "to": "2026-11-15T00:00:00.000Z"
+  },
+  "planUsage": {
+    "extraCreditsLeftUsd": 12.34,
+    "observedAt": "2026-11-15T00:00:00.000Z",
+    "period": "this_week",
+    "weeklyLimitUsedPercent": 58.5
+  },
+  "recommendations": [],
+  "reportId": "01a1dc80-f000-70e9-abdc-252af78b9616",
+  "schemaVersion": 4,
+  "summary": "1 connector is connected, but this bot has no access to it. 6 bots each accounted for under 1% of usage in the last seven days. Not observed: conversation text, the audit log, page counts. Partially observed: usage by bot and by routine, when each bot was last active.",
+  "visibility": [
+    {
+      "seen": false,
+      "signal": "transcripts",
+      "why": "The tool was unavailable."
+    },
+    {
+      "seen": "partial",
+      "signal": "usage",
+      "why": "The usage report gives exact and bounded shares, omits one bot and omits routine usage."
+    },
+    {
+      "seen": true,
+      "signal": "otherBots",
+      "why": "The account lists all bots."
+    },
+    {
+      "seen": false,
+      "signal": "auditLog",
+      "why": "The tool was unavailable."
+    },
+    {
+      "seen": true,
+      "signal": "accountRole",
+      "why": "The account settings show the role."
+    },
+    {
+      "seen": true,
+      "signal": "tasks",
+      "why": "The task list includes seven-day closures."
+    },
+    {
+      "seen": false,
+      "signal": "pages",
+      "why": "The tool was unavailable."
+    },
+    {
+      "seen": "partial",
+      "signal": "botActivity",
+      "why": "Only one bot has a reported activity time."
+    },
+    {
+      "seen": true,
+      "signal": "routines",
+      "why": "The routine list includes states and run history."
+    }
+  ]
+}

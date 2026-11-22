@@ -8,7 +8,7 @@ import { Ajv2020 } from "ajv/dist/2020.js";
 const root = join(import.meta.dirname, "..");
 const binary = join(root, "dist", "ambitious-audit.mjs");
 const owner = readFileSync(join(root, "test", "fixtures", "owner.json"), "utf8");
-const validate = new Ajv2020({ allErrors: true, strict: true }).compile(JSON.parse(readFileSync(join(root, "schemas", "send_report.v3.json"), "utf8")));
+const validate = new Ajv2020({ allErrors: true, strict: true }).compile(JSON.parse(readFileSync(join(root, "schemas", "send_report.v4.json"), "utf8")));
 const home = process.env.AMBITIOUS_HOME;
 if (home === undefined || home === "") {
   process.stderr.write("verify/audit: AMBITIOUS_HOME is not set.\n");
@@ -60,8 +60,8 @@ const announcements = Array.from({ length: 12 }, (_, index) => ({
 }));
 announcements.push({ ...announcements[0], priority: "high", title: "A duplicate must not replace the first entry." });
 const built = run(["report", "build"], JSON.stringify({ snapshotId: snapshot.snapshotId, reviewRequired: true, announcements }));
-assert.equal(built.payload.schemaVersion, 3);
-assert.deepEqual(built.payload.moduleVersions, { audit: "0.3.0" });
+assert.equal(built.payload.schemaVersion, 4);
+assert.deepEqual(built.payload.moduleVersions, { audit: "0.4.0" });
 assert.deepEqual(built.payload.announcements, [11, 0, 1, 2, 3, 4, 5, 6, 7, 8].map((index) => ({
   id: announcements[index].id,
   priority: announcements[index].priority,
@@ -150,5 +150,9 @@ if (shares.normalized.usageOther?.share !== 0.08 || shares.normalized.weeklyLimi
 if (run(["findings"], JSON.stringify({ snapshotId: shares.snapshotId })).findings.some((item) => item.ruleId === "bot-unused")) stop("a bot the usage report did not list was called unused");
 sharesDocument.visibility = sharesDocument.visibility.map((entry) => (entry.signal === "usage" ? { ...entry, seen: true } : entry));
 if (fail(["snapshot"], JSON.stringify(sharesDocument)) !== 1) stop("usage was accepted as seen although one bot's usage was not listed");
-if (run(["schema"]).schema.$id !== "urn:ambitious:audit:schema:collector:v1") stop("schema did not print the collector schema");
+if (run(["schema"]).schema.$id !== "urn:ambitious:audit:schema:collector:v2") stop("schema did not print the collector schema");
+const v2 = run(["snapshot"], readFileSync(join(root, "schemas/examples/collector.v2/valid/weekly-activity.json"), "utf8"));
+const v4 = run(["report", "build"], JSON.stringify({ snapshotId: v2.snapshotId, reviewRequired: false }));
+assert.deepEqual(v4.payload, JSON.parse(readFileSync(join(root, "schemas/examples/send_report.v4/valid/weekly-activity.json"), "utf8")));
+assert.deepEqual(run(["schema", "send", "report"]).schema.$id, "urn:ambitious:audit:schema:send_report:v4");
 process.stdout.write(`verify/audit: ok. report ${built.reportId}, ${recommendations.length} recommendation(s)\n`);

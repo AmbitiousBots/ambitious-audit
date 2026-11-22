@@ -2,7 +2,7 @@
 
 The audit module turns what a bot can see in an account into a snapshot, diffs it against a stored baseline, applies rule-based findings and returns at most three recommendations, each citing its evidence, plus a map of what the bot could not see. A value the bot could not observe is recorded as unknown, never as zero, and no finding is made from it. It is a command-line tool with JSON in and JSON out, one SQLite file and no user interface. The bot shows results in its own pages. A report leaves the computer only when the owner has approved the tool that sends it and the platform confirms that approval covers the call.
 
-The module follows the shared module contract in [ambitious-kit](https://github.com/AmbitiousBots/ambitious-kit/blob/kit-v0.2.6/MODULE_CONTRACT.md): one binary, a JSON envelope on stdout, one SQLite file, deterministic with `--now` and `--seed`, and no network. Version 0.3.0 uses kit 0.2.6, kept under `vendor/` so a build does not download it.
+The module follows the shared module contract in [ambitious-kit](https://github.com/AmbitiousBots/ambitious-kit/blob/kit-v0.2.6/MODULE_CONTRACT.md): one binary, a JSON envelope on stdout, one SQLite file, deterministic with `--now` and `--seed`, and no network. Version 0.4.0 uses kit 0.2.6, kept under `vendor/` so a build does not download it.
 
 Part of [Ambitious](https://ambitiousbots.com). Licensed under the Apache License, Version 2.0; see [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
@@ -26,10 +26,11 @@ ambitious-audit <command> [--in file] [--db path] [--now ISO8601] [--seed int] [
 | `report build` | write | `{ snapshotId, reviewRequired, announcements? }` | `{ reportId, payload, next }` |
 | `report mark` | write | `{ reportId, state, at }` | `{ report, next }` |
 | `feedback build` | none | `{ reportId?, text, from }` | `{ payload }` |
-| `schema` | none | no | `{ input, commands, schema }`: the JSON Schema of the collector document, which is the input of `snapshot`. |
+| `schema` | none | no | `{ input, commands, schema }`: the collector v2 schema for `snapshot`. |
+| `schema send report` | none | no | `{ output, schema }` for the v4 report payload. |
 | `schema <command>` | none | no | The same for another command's input, for example `schema report mark`. `commands` lists every name that works here. |
 
-`read` commands open the database with `mode=ro` and never create or change it. A newly built `payload` is the `send_report` document in [schemas/send_report.v3.json](schemas/send_report.v3.json). Stored version 1 and version 2 reports remain readable and are returned unchanged. `next` tells the bot what to do with the report: wait for review, send, confirm, or stop.
+`read` commands open the database with `mode=ro` and never create or change it. A newly built `payload` is the `send_report` document in [schemas/send_report.v4.json](schemas/send_report.v4.json). A same-id rebuild returns the stored payload for every report version. `next` tells the bot what to do with the report: wait for review, send, confirm, or stop.
 
 A report id comes from the snapshot, `--seed` and `--now`. Building the same snapshot again with the same seed and time returns the same id and the stored payload, including its original announcements even if a later build supplies a different list. A report is marked `sent` at most once. When a review is required, `sent` and `failed` are refused until the report is marked `reviewed`. After 3 failed attempts the report stays failed.
 
@@ -61,40 +62,36 @@ An owner can pre-approve `send_report` once for the daily routine. Before every 
 
 ## What the bot could not observe
 
-The collector document is described by [schemas/collector.v1.json](schemas/collector.v1.json); `ambitious-audit schema` prints it. A bot often cannot see everything, and the document has a way to say so for each value:
+Use [collector v2](schemas/collector.v2.json) for new snapshots. `snapshot` also accepts collector v1. Take bot and connector display names from the account tools. Keep tokens, credentials and transcripts out of every field, including names and evidence.
 
-| Value | When it was not observed | Visibility signal that must then say `seen: false` |
+Each visibility entry has a `signal`, a `seen` value and a short `why`. Use `true` when the tool covered the signal, `false` when it returned nothing for it, and `"partial"` when it covered part of the signal. Describe what was missing. Include one entry for each of `transcripts`, `usage`, `otherBots`, `auditLog`, `accountRole`, `tasks`, `pages`, `botActivity` and `routines`. Gaps produce visibility findings.
+
+| Observation | When unavailable | Visibility signal |
 |---|---|---|
-| `account.kind` | `"unknown"` | `accountRole` |
-| `tasks.open`, `tasks.stale7d`, `tasks.blocked` | `null` | `tasks` |
-| `pages.count`, `pages.updated7d` | `null` | `pages` |
-| `bots[].lastActiveAt` | `null` | `botActivity` |
-| `routines[].pausedAt`, `routines[].createdAt` | left out | none; a paused routine with no `pausedAt` is reported without a duration |
-| `bots[].routineCount`, `routines[].lastRunAt` | `null` | `routines` |
-| `bots[].usage`, `routines[].usage` | `null` | `usage` |
+| Account role | `account.kind: "unknown"` | `accountRole` |
+| Open, stale, blocked and seven-day closed task counts from the task module | `null` | `tasks` |
+| Page count and pages updated in seven days | `null` | `pages` |
+| Each bot’s last activity | `null` | `botActivity` |
+| Per-bot routine count, last routine run, runs and failed runs in seven days | `null` | `routines` |
+| Bot, routine or plan readings | `null` for each missing value | `usage` |
 
-`null` means not observed. It never means zero, and the module never turns it into zero. `snapshot` refuses a document in which a value is `null` while its signal says `seen: true`, so every gap shows up in the visibility map, in the findings and in the report. `lastActiveAt` and `lastRunAt` take the word `"never"` when the account shows that the thing has not happened yet, which is different from not knowing.
+A null value requires a false or partial visibility entry. For last activity and last run, use a UTC timestamp when reported, or `"never"` when the tool reports no activity since creation. Omit the optional routine times `pausedAt` and `createdAt` when unavailable.
 
-Task counts come from the output of the ambitious-tasks module, which keeps the bot's task list. When that module is not installed, or its output was not read, all three counts are `null`.
+### Usage and activity
 
-### Usage
+Read bot shares from the platform usage report. Use one period for all bot shares in a snapshot. Add `periodStart` and `periodEnd` when the report supplies them.
 
-Usage on a bot or a routine is `null` when it was not observed. Otherwise it takes one of two forms, chosen by `unit`:
-
-| Form | Where | Meaning |
+| Platform reading | Collector v2 | Report v4 |
 |---|---|---|
-| `{ "unit": "credits" \| "percent", "amount7d": number }` | bots and routines | An amount for the 7 days before `collectedAt`: credits used, or a percentage from 0 to 100. |
-| `{ "unit": "share", "period": "this_week" \| "last_7_days" \| "last_30_days", "share": number, "periodStart"?, "periodEnd"? }` | bots only | The bot's share, from 0 to 1, of all the account's bot usage in the named period. `this_week` is the current week so far. |
+| 42% of bot usage over the last seven days | `{"unit":"share","period":"last_7_days","share":0.42}` | `usageShare: 0.42` |
+| <1% over that period | `{"unit":"share","period":"last_7_days","shareBelow":0.01}` | `usageShareBelow: 0.01` |
+| Only a combined “other” row | Store the combined share in `usageOther` and leave the individual bot’s `usage` null | Both individual share fields are null |
 
-The share form is for an account whose usage report gives each bot's share of a period, lists only the bots that used the most, and sums the rest as one line. Such a report fills three things:
+Each share carries its `usagePeriod`, one of `this_week`, `last_7_days` or `last_30_days`. Seven-day percentage readings in the legacy `{unit, amount7d}` form also yield a share. Credit amounts alone leave both share fields and the period null. If the report gives bot shares and omits routine usage, mark usage partial and retain every bot reading.
 
-- Each bot it lists by name gets a `usage` in share form. Every share in one document names the same period.
-- `usageOther: { "share": number, "botCount"?: number }` at the top of the document holds the summed line for the bots it did not list. It needs at least one listed share, which says what period it covers.
-- `weeklyLimitUsed: { "percent": number, "asOf": time }` at the top of the document holds how much of the weekly limit is used, when the account reports it. Reports give it for the current week only; leave it out otherwise.
+When the platform provides plan figures, collect `planUsage` with `weeklyLimitUsedPercent` (0–100), `extraCreditsLeftUsd` (whole cents), `observedAt` (UTC) and `period`. Use null for each missing value. Omit the object when the tool provides no plan reading. For older snapshots, a `weeklyLimitUsed` percentage within 0–100 supplies the percentage, observation time and current-week period. A legacy percentage above 100 cannot be represented in v4.
 
-A bot counted only in the summed line has `usage: null`. Its own share was not observed, so the `usage` signal says `seen: false` and its `why` says that the bot is inside the summed line. The same holds for routines when the report gives nothing per routine. The `usage` signal counts as seen only when usage was observed for every listed bot and every listed routine. A share is never turned into credits or into a percentage of the limit.
-
-The visibility map has exactly one entry for each of nine signals: `transcripts`, `usage`, `otherBots`, `auditLog`, `accountRole`, `tasks`, `pages`, `botActivity` and `routines`. Each entry with `seen: false` becomes a finding of kind `visibility`, so the list of findings always says what the audit does not cover. Those findings never become recommendations.
+The v4 payload lists up to 200 bots with display name, exact share or upper bound, period, last activity and routine count. It lists up to 200 connectors with display name and status. `counts.tasks.closed7d` records seven-day closures. `counts.routines` gives active, paused and failing totals, plus `runs7d` and `failedRuns7d`. An observed empty routine list yields zero. An unseen inventory yields null totals. A partially observed inventory yields null totals unless every bot’s known routine count reconciles with its listed routines and the bot list is complete. Each run total also requires that measure on every listed routine.
 
 ### When the role is unknown
 
@@ -121,6 +118,7 @@ Rules live in `rules/*.json`. Each one has a positive fixture and a negative fix
 | `paused-routine` | A routine is paused, and its `pausedAt` is more than 7 days before the snapshot. | yes |
 | `paused-routine-since-unknown` | A routine is paused, the document gives no `pausedAt`, and the routine was neither created nor run in the 7 days before the snapshot. Severity is low, and the finding names no duration. | yes |
 | `bot-unused` | A bot's last activity is `"never"` or more than 14 days before the snapshot, or its last activity was not observed and it is listed with a share of 0 for the last 30 days. Never when its usage shows use within the last 14 days. | yes |
+| `bots-barely-used` | At least three bots each accounted for under 1% of usage over `last_7_days`, by exact share, upper bound or seven-day percentage. Priority is low and effort is small. | yes |
 | `stale-tasks` | The count of tasks with no change in 7 days is greater than the threshold in the rule file. | no |
 | `duplicate-routines` | Two routines on the same bot share a schedule. | yes |
 
@@ -166,7 +164,11 @@ This module adds:
 
 Detail such as the states in a refused transition is in `data`, not in the error object.
 
-## Moving from 0.2.2 to 0.3.0
+## Moving from 0.3.0 to 0.4.0
+
+Use collector v2 for new readings. Existing collector v1 inputs keep their snapshot ids with the same seed and time. New reports use v4. Rebuilding a stored v1, v2 or v3 report id returns its original payload. The database schema and delivery states are unchanged.
+
+## Earlier changes: 0.2.2 to 0.3.0
 
 - New reports use `send_report.v3`: every finding and recommendation has a priority, and every report has an announcements array. `report build` accepts the optional saved service announcements described above.
 - Stored version 1 and version 2 reports are read and returned unchanged, including on a rebuild of the same report id. Their schema files are unchanged. Collectors and database migrations are unchanged.

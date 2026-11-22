@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 4,
+  "reportId": "01a1dc80-f000-73f2-8a1c-9b0d4e5f6a7b",
+  "period": {
+    "from": "2026-11-08T00:00:00Z",
+    "to": "2026-11-15T00:00:00Z"
+  },
+  "accountKind": "owner",
+  "summary": "Task, routine and usage tools were unavailable.",
+  "counts": {
+    "bots": 0,
+    "connectors": {
+      "ok": 0,
+      "needsAuth": 0,
+      "needsGrant": 0,
+      "initializing": 0,
+      "error": 0
+    },
+    "routines": {
+      "active": null,
+      "paused": null,
+      "failing": null,
+      "runs7d": null,
+      "failedRuns7d": null
+    },
+    "tasks": {
+      "open": null,
+      "stale7d": null,
+      "blocked": null,
+      "closed7d": null
+    },
+    "pages": {
+      "count": null,
+      "updated7d": null
+    }
+  },
+  "findings": [],
+  "recommendations": [],
+  "evidence": [],
+  "visibility": [
+    {
+      "signal": "transcripts",
+      "seen": false,
+      "why": "The tool was unavailable."
+    },
+    {
+      "signal": "usage",
+      "seen": false,
+      "why": "The tool was unavailable."
+    },
+    {
+      "signal": "otherBots",
+      "seen": false,
+      "why": "The tool was unavailable."
+    },
+    {
+      "signal": "auditLog",
+      "seen": false,
+      "why": "The tool was unavailable."
+    },
+    {
+      "signal": "accountRole",
+      "seen": true,
+      "why": "The account settings show the role."
+    },
+    {
+      "signal": "tasks",
+      "seen": false,
+      "why": "The tool was unavailable."
+    },
+    {
+      "signal": "pages",
+      "seen": false,
+      "why": "The tool was unavailable."
+    },
+    {
+      "signal": "botActivity",
+      "seen": false,
+      "why": "The tool was unavailable."
+    },
+    {
+      "signal": "routines",
+      "seen": false,
+      "why": "The tool was unavailable."
+    }
+  ],
+  "moduleVersions": {
+    "audit": "0.4.0"
+  },
+  "announcements": [],
+  "bots": [],
+  "connectors": [],
+  "planUsage": null
+}

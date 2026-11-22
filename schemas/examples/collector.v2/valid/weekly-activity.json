@@ -1,0 +1,191 @@
+{
+  "schemaVersion": 2,
+  "collectedAt": "2026-11-15T00:00:00.000Z",
+  "account": {
+    "kind": "owner",
+    "label": "Workspace"
+  },
+  "bots": [
+    {
+      "id": "bot-1",
+      "name": "Estimates",
+      "usage": {
+        "unit": "share",
+        "period": "last_7_days",
+        "share": 0.25
+      },
+      "lastActiveAt": "2026-11-15T00:00:00.000Z",
+      "routineCount": 1
+    },
+    {
+      "id": "bot-2",
+      "name": "Appointment recalls",
+      "usage": {
+        "unit": "share",
+        "period": "last_7_days",
+        "share": 0.25
+      },
+      "lastActiveAt": null,
+      "routineCount": 0
+    },
+    {
+      "id": "bot-3",
+      "name": "Stock counts",
+      "usage": {
+        "unit": "share",
+        "period": "last_7_days",
+        "shareBelow": 0.01
+      },
+      "lastActiveAt": null,
+      "routineCount": 0
+    },
+    {
+      "id": "bot-4",
+      "name": "Order preparation",
+      "usage": {
+        "unit": "share",
+        "period": "last_7_days",
+        "shareBelow": 0.01
+      },
+      "lastActiveAt": null,
+      "routineCount": 0
+    },
+    {
+      "id": "bot-5",
+      "name": "Time entries",
+      "usage": {
+        "unit": "share",
+        "period": "last_7_days",
+        "shareBelow": 0.01
+      },
+      "lastActiveAt": null,
+      "routineCount": 0
+    },
+    {
+      "id": "bot-6",
+      "name": "Volunteer shifts",
+      "usage": {
+        "unit": "share",
+        "period": "last_7_days",
+        "shareBelow": 0.01
+      },
+      "lastActiveAt": null,
+      "routineCount": 0
+    },
+    {
+      "id": "bot-7",
+      "name": "Bookings",
+      "usage": {
+        "unit": "share",
+        "period": "last_7_days",
+        "shareBelow": 0.01
+      },
+      "lastActiveAt": null,
+      "routineCount": 0
+    },
+    {
+      "id": "bot-8",
+      "name": "Production checks",
+      "usage": {
+        "unit": "share",
+        "period": "last_7_days",
+        "shareBelow": 0.01
+      },
+      "lastActiveAt": null,
+      "routineCount": 0
+    },
+    {
+      "id": "bot-9",
+      "name": "Build checks",
+      "usage": null,
+      "lastActiveAt": null,
+      "routineCount": 0
+    }
+  ],
+  "routines": [
+    {
+      "id": "routine-1",
+      "botId": "bot-1",
+      "schedule": "daily",
+      "state": "active",
+      "lastRunAt": "2026-11-15T00:00:00.000Z",
+      "runs7d": 6,
+      "failedRuns7d": 0,
+      "usage": null
+    }
+  ],
+  "connectors": [
+    {
+      "name": "Calendar",
+      "status": "ok"
+    },
+    {
+      "name": "Documents",
+      "status": "needsGrant"
+    }
+  ],
+  "tasks": {
+    "open": 4,
+    "stale7d": 0,
+    "blocked": 1,
+    "closed7d": 3
+  },
+  "pages": {
+    "count": null,
+    "updated7d": null
+  },
+  "visibility": [
+    {
+      "signal": "transcripts",
+      "seen": false,
+      "why": "The tool was unavailable."
+    },
+    {
+      "signal": "usage",
+      "seen": "partial",
+      "why": "The usage report gives exact and bounded shares, omits one bot and omits routine usage."
+    },
+    {
+      "signal": "otherBots",
+      "seen": true,
+      "why": "The account lists all bots."
+    },
+    {
+      "signal": "auditLog",
+      "seen": false,
+      "why": "The tool was unavailable."
+    },
+    {
+      "signal": "accountRole",
+      "seen": true,
+      "why": "The account settings show the role."
+    },
+    {
+      "signal": "tasks",
+      "seen": true,
+      "why": "The task list includes seven-day closures."
+    },
+    {
+      "signal": "pages",
+      "seen": false,
+      "why": "The tool was unavailable."
+    },
+    {
+      "signal": "botActivity",
+      "seen": "partial",
+      "why": "Only one bot has a reported activity time."
+    },
+    {
+      "signal": "routines",
+      "seen": true,
+      "why": "The routine list includes states and run history."
+    }
+  ],
+  "evidence": [],
+  "planUsage": {
+    "weeklyLimitUsedPercent": 58.5,
+    "extraCreditsLeftUsd": 12.34,
+    "observedAt": "2026-11-15T00:00:00.000Z",
+    "period": "this_week"
+  }
+}

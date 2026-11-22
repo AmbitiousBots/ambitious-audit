@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { isRecord } from "@ambitious/kit/domain/json";
 import botUnused from "../rules/bot-unused.json" with { type: "json" };
+import botsBarelyUsed from "../rules/bots-barely-used.json" with { type: "json" };
 import connectorNeedsAuth from "../rules/connector-needs-auth.json" with { type: "json" };
 import connectorNeedsGrant from "../rules/connector-needs-grant.json" with { type: "json" };
 import duplicateRoutines from "../rules/duplicate-routines.json" with { type: "json" };
@@ -16,7 +17,7 @@ import { isReportPayload } from "../src/domain/schema.ts";
 import type { CollectorInput, EvidenceId } from "../src/domain/types.ts";
 import { isEvidenceId, isFingerprint, isReportId, isRuleId } from "../src/domain/types.ts";
 
-const FILES: readonly unknown[] = [failingRoutine, connectorNeedsAuth, connectorNeedsGrant, pausedRoutine, pausedRoutineSinceUnknown, botUnused, staleTasks, duplicateRoutines];
+const FILES: readonly unknown[] = [failingRoutine, connectorNeedsAuth, connectorNeedsGrant, pausedRoutine, pausedRoutineSinceUnknown, botUnused, staleTasks, duplicateRoutines, botsBarelyUsed];
 
 type Fixture = {
   readonly name: string;
@@ -60,7 +61,7 @@ const snapshotFor = (fixture: Fixture): CollectorInput => {
     { id: "ev-90", kind: "count" as const, text: "Open tasks have not changed.", source: "tasks" },
   ].filter((item) => isEvidenceId(item.id));
   return parseCollector({
-    schemaVersion: 1,
+    schemaVersion: 2,
     collectedAt: "2026-11-15T00:00:00Z",
     account: { kind: "owner", label: "Main" },
     bots,
@@ -118,7 +119,7 @@ test("recommendations stay within three and each cites evidence that exists", ()
 
 test("evidence for bot-10 is not cited for bot-1, and the same holds for routines", () => {
   const snapshot = parseCollector({
-    schemaVersion: 1,
+    schemaVersion: 2,
     collectedAt: "2026-11-15T00:00:00Z",
     account: { kind: "owner", label: "Main" },
     bots: [
@@ -200,7 +201,7 @@ test("cited recommendation evidence stays in the report when the evidence list i
     ruleHit("bot-unused-late", 4, ids(21, 10)),
   ];
   const reportId = branded("018f0000-0000-7000-8000-000000000099", isReportId, "report id");
-  const { payload } = assembleReport(full, hits, new Set(), reportId, "0.3.0");
+  const { payload } = assembleReport(full, hits, new Set(), reportId, "0.4.0");
   const kept = new Set(payload.evidence.map((item) => item.id));
   assert.equal(payload.evidence.length, 30);
   for (const recommendation of payload.recommendations) {
@@ -225,7 +226,7 @@ test("when the role is unknown, at most three recommendations are returned and t
   const recommended = recommendationsFrom(hits, new Set()).map((item) => String(item.recommendation.id));
   assert.deepEqual(recommended, ["connector-sign-in-a", "connector-sign-in-b", "connector-sign-in-c"]);
   const reportId = branded("018f0000-0000-7000-8000-000000000098", isReportId, "report id");
-  const { payload } = assembleReport(snapshot, hits, new Set(), reportId, "0.3.0");
+  const { payload } = assembleReport(snapshot, hits, new Set(), reportId, "0.4.0");
   assert.equal(payload.recommendations.length, 3);
   assert.equal(payload.recommendations.every((item) => item.evidenceIds.length === 2), true);
   assert.deepEqual(payload.findings.filter((finding) => finding.withheld === "roleUnknown").map((finding) => String(finding.ruleId)), ["connector-sign-in-role-bound"]);
@@ -253,6 +254,7 @@ test("every rule maps high severity to high priority and medium or low severity 
     "paused-routine": "low",
     "paused-routine-since-unknown": "low",
     "bot-unused": "low",
+    "bots-barely-used": "low",
     "stale-tasks": "low",
     "duplicate-routines": "low",
   };
@@ -262,8 +264,8 @@ test("every rule maps high severity to high priority and medium or low severity 
     const fixture = fixturesOf(file).find((item) => item.expect === "hit");
     assert.ok(fixture !== undefined, rule.id);
     const snapshot = snapshotFor(fixture);
-    const { payload } = assembleReport(snapshot, evaluateRules(snapshot, [rule]), new Set(), reportId, "0.3.0");
-    assert.equal(payload.schemaVersion, 3);
+    const { payload } = assembleReport(snapshot, evaluateRules(snapshot, [rule]), new Set(), reportId, "0.4.0");
+    assert.equal(payload.schemaVersion, 4);
     assert.deepEqual(payload.announcements, []);
     const finding = payload.findings.find((item) => item.ruleId === rule.id);
     assert.ok(finding !== undefined, rule.id);
@@ -279,7 +281,7 @@ test("every rule maps high severity to high priority and medium or low severity 
 test("the report reader rejects announcement ids repeated with different titles or priorities", () => {
   const snapshot = snapshotFor({ name: "empty", expect: "miss" });
   const reportId = branded("018f0000-0000-7000-8000-000000000096", isReportId, "report id");
-  const { payload } = assembleReport(snapshot, [], new Set(), reportId, "0.3.0");
+  const { payload } = assembleReport(snapshot, [], new Set(), reportId, "0.4.0");
   const announcements = [{ id: "release", priority: "low", title: "Service title" }];
   assert.equal(isReportPayload({ ...payload, announcements }), true);
   assert.equal(isReportPayload({ ...payload, announcements: [...announcements, { id: "release", priority: "high", title: "A different service title" }] }), false);

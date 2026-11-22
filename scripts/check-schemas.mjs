@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import Ajv2020 from "ajv/dist/2020.js";
+import { wireValidator } from "../src/domain/wire-validator.ts";
 
 const repoRoot = join(import.meta.dirname, "..");
 const schemaDirectory = join(repoRoot, "schemas");
@@ -11,10 +11,13 @@ const generatedFile = join(repoRoot, "src", "domain", "wire.generated.ts");
 
 const SCHEMAS = [
   { file: "collector.v1.json", typeName: "CollectorV1", sentToService: false },
+  { file: "collector.v2.json", typeName: "CollectorV2", sentToService: false },
   { file: "send_report.v1.json", typeName: "SendReportV1", sentToService: true, maxTextCharacters: 24000 },
   { file: "send_report.v2.json", typeName: "SendReportV2", sentToService: true, maxTextCharacters: 29000 },
   // WHY: V3 adds ten announcements, each with a 64-character id and a 120-character title: 29000 + 10 * (64 + 120). Priority enums add no free text.
   { file: "send_report.v3.json", typeName: "SendReportV3", sentToService: true, maxTextCharacters: 30840 },
+  // WHY: V4 adds 200 bot names and activity times, 200 connector names and one plan observation time.
+  { file: "send_report.v4.json", typeName: "SendReportV4", sentToService: true, maxTextCharacters: 83664 },
   { file: "send_feedback.v1.json", typeName: "SendFeedbackV1", sentToService: true, maxTextCharacters: 4100 },
 ];
 
@@ -38,6 +41,9 @@ const KEYWORDS = new Set([
   "maxLength",
   "pattern",
   "minimum",
+  "exclusiveMinimum",
+  "multipleOf",
+  "oneOf",
   "maximum",
   "$ref",
   "if",
@@ -59,7 +65,36 @@ const resolve = (root, node) => {
 
 const sameMembers = (left, right) => left.length === right.length && left.every((item) => right.includes(item));
 
+const oneOfForms = (node) => {
+  const forms = [];
+  if (!Array.isArray(node.oneOf) || node.if || node.then || node.else) return { problem: true };
+  const nullable = typesOf(node).includes("null");
+  if (node.oneOf.filter((branch) => branch?.type === "null").length !== Number(nullable)) return { problem: true };
+  for (const branch of node.oneOf) {
+    if (branch === null || typeof branch !== "object") return { problem: true };
+    if (branch.type === "null" && sameMembers(Object.keys(branch), ["type"])) continue;
+    if (branch.type !== "object" || !branch.properties || !typesOf(node).includes("object") ||
+        Object.keys(branch).some((key) => !["type", "properties", "required"].includes(key))) return { problem: true };
+    const properties = { ...node.properties };
+    const required = [...(node.required ?? []), ...(branch.required ?? [])];
+    for (const [key, limit] of Object.entries(branch.properties)) {
+      const base = properties[key];
+      if (!base) return { problem: true };
+      if (limit === true) continue;
+      if (limit === false) delete properties[key];
+      else if (limit === null || typeof limit !== "object") return { problem: true };
+      else if (sameMembers(Object.keys(limit), ["enum"]) && Array.isArray(limit.enum) && limit.enum.every((value) => base.enum?.includes(value))) properties[key] = limit;
+      else if (sameMembers(Object.keys(limit), ["type"]) && typesOf(base).includes(limit.type)) properties[key] = { ...base, type: limit.type };
+      else return { problem: true };
+    }
+    if (required.some((key) => !properties[key])) return { problem: true };
+    forms.push({ properties, required });
+  }
+  return { forms };
+};
+
 const formsOf = (node) => {
+  if (node.oneOf !== undefined) return oneOfForms(node);
   if (node.if === undefined && node.then === undefined && node.else === undefined) return null;
   const tags = Object.keys(node.if?.properties ?? {});
   const tag = tags[0];
@@ -134,7 +169,8 @@ const lintNode = (root, node, at) => {
     if (ORGANISATION_NAME.test(name)) say(`declares "${name}"; the organisation comes from the caller's credential and never from the payload`);
   }
   if (formsOf(node)?.problem === true) {
-    say('uses "if", "then" and "else" in a way this check does not understand. They may only split an object into two forms by one required property: "if" tests that property against a const, and "then" and "else" each list more required properties, set each of those to true under "properties", and set the properties of the other form to false');
+    if (node.oneOf !== undefined) say("oneOf branches must narrow properties of the enclosing object");
+    else say('uses "if", "then" and "else" in a way this check does not understand. They may only split an object into two forms by one required property: "if" tests that property against a const, and "then" and "else" each list more required properties, set each of those to true under "properties", and set the properties of the other form to false');
   }
   for (const [index, part] of (node.allOf ?? []).entries()) {
     const keys = Object.keys(part);
@@ -244,7 +280,7 @@ const domainAgreement = async (loaded) => {
   const { WIRE_PATTERNS, WIRE_LIMITS } = await import(join(repoRoot, "src", "domain", "types.ts"));
   const schema = Object.fromEntries(loaded.map((entry) => [entry.typeName, entry.schema]));
   const pairs = [
-    ...[schema.SendReportV2, schema.SendReportV3].flatMap((report) => [
+    ...[schema.SendReportV2, schema.SendReportV3, schema.SendReportV4].flatMap((report) => [
       ["WIRE_PATTERNS.uuidV7", WIRE_PATTERNS.uuidV7.source, report.$defs.uuidV7.pattern],
       ["WIRE_PATTERNS.evidenceId", WIRE_PATTERNS.evidenceId.source, report.$defs.evidenceId.pattern],
       ["WIRE_PATTERNS.ruleId", WIRE_PATTERNS.ruleId.source, report.$defs.finding.properties.ruleId.pattern],
@@ -256,13 +292,17 @@ const domainAgreement = async (loaded) => {
       ["WIRE_LIMITS.recommendations", WIRE_LIMITS.recommendations, report.properties.recommendations.maxItems],
     ]),
     ["WIRE_PATTERNS.uuidV7", WIRE_PATTERNS.uuidV7.source, schema.SendFeedbackV1.$defs.uuidV7.pattern],
-    ["WIRE_PATTERNS.evidenceId", WIRE_PATTERNS.evidenceId.source, schema.CollectorV1.$defs.evidenceId.pattern],
-    ["WIRE_PATTERNS.timestamp", WIRE_PATTERNS.timestamp.source, schema.CollectorV1.$defs.timestamp.pattern],
-    ["WIRE_LIMITS.evidenceTextCharacters", WIRE_LIMITS.evidenceTextCharacters, schema.CollectorV1.$defs.evidence.properties.text.maxLength],
+    ...[schema.CollectorV1, schema.CollectorV2].flatMap((collector) => [
+      ["WIRE_PATTERNS.evidenceId", WIRE_PATTERNS.evidenceId.source, collector.$defs.evidenceId.pattern],
+      ["WIRE_PATTERNS.timestamp", WIRE_PATTERNS.timestamp.source, collector.$defs.timestamp.pattern],
+      ["WIRE_LIMITS.evidenceTextCharacters", WIRE_LIMITS.evidenceTextCharacters, collector.$defs.evidence.properties.text.maxLength],
+    ]),
     ["WIRE_LIMITS.feedbackTextCharacters", WIRE_LIMITS.feedbackTextCharacters, schema.SendFeedbackV1.properties.text.maxLength],
-    ["WIRE_PATTERNS.announcementId", WIRE_PATTERNS.announcementId.source, schema.SendReportV3.$defs.announcement.properties.id.pattern],
-    ["WIRE_LIMITS.announcements", WIRE_LIMITS.announcements, schema.SendReportV3.properties.announcements.maxItems],
-    ["WIRE_LIMITS.announcementTitleCharacters", WIRE_LIMITS.announcementTitleCharacters, schema.SendReportV3.$defs.announcement.properties.title.maxLength],
+    ...[schema.SendReportV3, schema.SendReportV4].flatMap((report) => [
+      ["WIRE_PATTERNS.announcementId", WIRE_PATTERNS.announcementId.source, report.$defs.announcement.properties.id.pattern],
+      ["WIRE_LIMITS.announcements", WIRE_LIMITS.announcements, report.properties.announcements.maxItems],
+      ["WIRE_LIMITS.announcementTitleCharacters", WIRE_LIMITS.announcementTitleCharacters, report.$defs.announcement.properties.title.maxLength],
+    ]),
   ];
   return {
     compared: pairs.length,
@@ -273,6 +313,10 @@ const domainAgreement = async (loaded) => {
 };
 
 const REQUIRED_LIMITS = [
+  ["send_report.v4.json bots", (s) => s.SendReportV4.properties.bots.maxItems, 200],
+  ["send_report.v4.json connectors", (s) => s.SendReportV4.properties.connectors.maxItems, 200],
+  ["send_report.v4.json bot name", (s) => s.SendReportV4.$defs.bot.properties.name.maxLength, 120],
+  ["send_report.v4.json connector name", (s) => s.SendReportV4.$defs.connector.properties.name.maxLength, 120],
   ["send_report.v1.json summary", (s) => s.SendReportV1.properties.summary.maxLength, 1200],
   ["send_report.v1.json evidence text", (s) => s.SendReportV1.$defs.evidence.properties.text.maxLength, 280],
   ["collector.v1.json evidence text", (s) => s.CollectorV1.$defs.evidence.properties.text.maxLength, 280],
@@ -292,7 +336,6 @@ const REQUIRED_LIMITS = [
 
 const run = async (argv) => {
   const write = argv.includes("--write");
-  const ajv = new Ajv2020({ allErrors: true, strict: true });
   const expected = readJson(expectedFile);
   const loaded = SCHEMAS.map((entry) => ({ ...entry, schema: readJson(join(schemaDirectory, entry.file)) }));
   const problems = [];
@@ -310,7 +353,7 @@ const run = async (argv) => {
     if (sentToService && bound > maxTextCharacters) {
       problems.push(`${file}: a payload could carry ${bound} characters of free text, more than the ${maxTextCharacters} allowed for something sent to the service`);
     }
-    const examples = checkExamples(ajv.compile(schema), file, expected);
+    const examples = checkExamples(wireValidator.compile(schema), file, expected);
     problems.push(...examples.problems);
     seenKeys.push(...examples.keys);
     process.stdout.write(

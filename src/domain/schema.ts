@@ -1,15 +1,15 @@
-import { Ajv2020 } from "ajv/dist/2020.js";
+import { wireValidator } from "./wire-validator.ts";
 import { isRecord } from "@ambitious/kit/domain/json";
-import collectorSchema from "../../schemas/collector.v1.json" with { type: "json" };
+import collectorV1Schema from "../../schemas/collector.v1.json" with { type: "json" };
+import collectorSchema from "../../schemas/collector.v2.json" with { type: "json" };
 import feedbackSchema from "../../schemas/send_feedback.v1.json" with { type: "json" };
 import reportV1Schema from "../../schemas/send_report.v1.json" with { type: "json" };
 import reportV2Schema from "../../schemas/send_report.v2.json" with { type: "json" };
-import reportSchema from "../../schemas/send_report.v3.json" with { type: "json" };
+import reportV3Schema from "../../schemas/send_report.v3.json" with { type: "json" };
+import reportSchema from "../../schemas/send_report.v4.json" with { type: "json" };
 import { pointerOf, type FieldProblem } from "./field-problems.ts";
 import type { CollectorInput, SendFeedbackPayload, SendReportPayload } from "./types.ts";
-import type { SendReportV1, SendReportV2 } from "./wire.generated.ts";
-
-const ajv = new Ajv2020({ allErrors: true, strict: true, verbose: true });
+import type { SendReportV1, SendReportV2, SendReportV3 } from "./wire.generated.ts";
 
 type SchemaError = {
   readonly instancePath: string;
@@ -44,6 +44,7 @@ const problemOf = (error: SchemaError): FieldProblem => {
   if (error.keyword === "type") return at(error.instancePath, `must be ${[error.params.type].flat().join(" or ")}`);
   if (error.keyword === "enum") return at(error.instancePath, `must be one of ${quoted(error.params.allowedValues)}`);
   if (error.keyword === "const") return at(error.instancePath, `must be ${quoted(error.params.allowedValue)}`);
+  if (error.keyword === "multipleOf") return at(error.instancePath, "must use whole cents");
   if (error.keyword === "pattern") return at(error.instancePath, "is not written in the required form");
   if (error.keyword === "false schema") return at(error.instancePath, "must be left out, because it does not go with the other fields of this value");
   if (error.keyword === "contains") {
@@ -57,7 +58,7 @@ export type Validator = { readonly problems: (raw: unknown) => readonly FieldPro
 
 export const validatorOf = (schema: unknown, name: string): Validator => {
   if (!isRecord(schema)) throw new Error(`The ${name} schema is not a JSON object.`);
-  const validate: Validate = ajv.compile(schema);
+  const validate: Validate = wireValidator.compile(schema);
   return {
     problems: (raw) => {
       if (validate(raw)) return [];
@@ -76,15 +77,18 @@ export const validatorOf = (schema: unknown, name: string): Validator => {
   };
 };
 
+const collectorV1 = validatorOf(collectorV1Schema, "collector version 1");
 const collector = validatorOf(collectorSchema, "collector");
 const report = validatorOf(reportSchema, "send_report");
 const reportV1 = validatorOf(reportV1Schema, "send_report version 1");
 const reportV2 = validatorOf(reportV2Schema, "send_report version 2");
+const reportV3 = validatorOf(reportV3Schema, "send_report version 3");
 const feedback = validatorOf(feedbackSchema, "send_feedback");
 
-export const collectorProblems = (raw: unknown): readonly FieldProblem[] => collector.problems(raw);
+export const collectorProblems = (raw: unknown): readonly FieldProblem[] =>
+  (isRecord(raw) && raw.schemaVersion === 1 ? collectorV1 : collector).problems(raw);
 
-export const isCollectorDocument = (raw: unknown): raw is CollectorInput => collector.problems(raw).length === 0;
+export const isCollectorDocument = (raw: unknown): raw is CollectorInput => collectorProblems(raw).length === 0;
 
 export const isReportPayload = (raw: unknown): raw is SendReportPayload => {
   const matches = (value: unknown): value is SendReportPayload => report.problems(value).length === 0;
@@ -94,5 +98,10 @@ export const isReportPayload = (raw: unknown): raw is SendReportPayload => {
 export const isReportV1Payload = (raw: unknown): raw is SendReportV1 => reportV1.problems(raw).length === 0;
 
 export const isReportV2Payload = (raw: unknown): raw is SendReportV2 => reportV2.problems(raw).length === 0;
+
+export const isReportV3Payload = (raw: unknown): raw is SendReportV3 => {
+  const matches = (value: unknown): value is SendReportV3 => reportV3.problems(value).length === 0;
+  return matches(raw) && new Set(raw.announcements.map((item) => item.id)).size === raw.announcements.length;
+};
 
 export const isFeedbackPayload = (raw: unknown): raw is SendFeedbackPayload => feedback.problems(raw).length === 0;

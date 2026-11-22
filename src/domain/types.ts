@@ -1,13 +1,14 @@
 import type {
-  CollectorV1,
-  CollectorV1VisibilityEntry,
+  CollectorV2,
+  CollectorV2VisibilityEntry,
   SendFeedbackV1,
   SendReportV1,
   SendReportV2,
   SendReportV3,
-  SendReportV3Announcement,
-  SendReportV3Finding,
-  SendReportV3Recommendation,
+  SendReportV4,
+  SendReportV4Announcement,
+  SendReportV4Finding,
+  SendReportV4Recommendation,
 } from "./wire.generated.js";
 
 declare const brand: unique symbol;
@@ -48,7 +49,7 @@ export const WIRE_LIMITS = {
 export const isReportId = (raw: string): raw is ReportId => WIRE_PATTERNS.uuidV7.test(raw);
 export const isSnapshotId = (raw: string): raw is SnapshotId => WIRE_PATTERNS.uuidV7.test(raw);
 export const isBaselineId = (raw: string): raw is BaselineId => WIRE_PATTERNS.uuidV7.test(raw);
-export const isFingerprint = (raw: string): raw is Fingerprint => raw.length > 0 && raw.length <= 500;
+export const isFingerprint = (raw: string): raw is Fingerprint => raw.length > 0 && raw.length <= 64 + 1000 * (1 + 2 * 128);
 export const isFeedbackId = (raw: string): raw is FeedbackId => WIRE_PATTERNS.uuidV7.test(raw);
 export const isEvidenceId = (raw: string): raw is EvidenceId => WIRE_PATTERNS.evidenceId.test(raw);
 export const isRuleId = (raw: string): raw is RuleId => raw.length <= 64 && WIRE_PATTERNS.ruleId.test(raw);
@@ -66,23 +67,24 @@ export const ok = <T>(value: T): Result<T, never> => ({ ok: true, value });
 
 export const err = <E>(error: E): Result<never, E> => ({ ok: false, error });
 
-export type CollectorInput = CollectorV1;
+// WHY: Preserve the collector version in canonical snapshot bytes because they determine snapshot and report ids.
+export type CollectorInput = Omit<CollectorV2, "schemaVersion"> & { readonly schemaVersion: 1 | 2 };
 
-export type VisibilitySignal = CollectorV1VisibilityEntry["signal"];
-export type VisibilityEntry = CollectorV1VisibilityEntry;
+export type VisibilitySignal = CollectorV2VisibilityEntry["signal"];
+export type VisibilityEntry = CollectorV2VisibilityEntry;
 export type VisibilityMap = readonly VisibilityEntry[];
 
 export const VISIBILITY_SIGNALS = ["transcripts", "usage", "otherBots", "auditLog", "accountRole", "tasks", "pages", "botActivity", "routines"] as const satisfies readonly VisibilitySignal[];
 
-export type AccountKind = CollectorV1["account"]["kind"];
+export type AccountKind = CollectorV2["account"]["kind"];
 export type AuditMode = "full" | "partial";
 
 export const auditModeOf = (snapshot: CollectorInput): AuditMode => (snapshot.account.kind === "unknown" ? "partial" : "full");
 
-export type Severity = SendReportV3Finding["severity"];
-export type Priority = SendReportV3Finding["priority"];
-export type Announcement = SendReportV3Announcement;
-export type Effort = SendReportV3Recommendation["effort"];
+export type Severity = SendReportV4Finding["severity"];
+export type Priority = SendReportV4Finding["priority"];
+export type Announcement = SendReportV4Announcement;
+export type Effort = SendReportV4Recommendation["effort"];
 export type FeedbackSender = SendFeedbackV1["from"];
 
 export type EvidenceIds = readonly EvidenceId[];
@@ -115,7 +117,7 @@ export type Change = {
 };
 
 export type Finding = {
-  readonly kind: SendReportV3Finding["kind"];
+  readonly kind: SendReportV4Finding["kind"];
   readonly ruleId: RuleId;
   readonly severity: Severity;
   readonly priority: Priority;
@@ -157,12 +159,15 @@ export type ReportEvidence = {
 };
 
 export type SendReportPayload = {
-  readonly schemaVersion: 3;
+  readonly schemaVersion: 4;
   readonly reportId: ReportId;
   readonly period: { readonly from: Timestamp; readonly to: Timestamp };
   readonly accountKind: AccountKind;
   readonly summary: string;
-  readonly counts: SendReportV3["counts"];
+  readonly counts: SendReportV4["counts"];
+  readonly bots: SendReportV4["bots"];
+  readonly connectors: SendReportV4["connectors"];
+  readonly planUsage: SendReportV4["planUsage"];
   readonly findings: readonly Finding[];
   readonly recommendations: Recommendations;
   readonly announcements: readonly Announcement[];
@@ -179,9 +184,9 @@ export type SendFeedbackPayload = {
   readonly text: string;
 };
 
-export type StoredReportPayload = SendReportPayload | SendReportV1 | SendReportV2;
+export type StoredReportPayload = SendReportPayload | SendReportV1 | SendReportV2 | SendReportV3;
 
-export const sendReportWire = (payload: SendReportPayload): SendReportV3 => payload;
+export const sendReportWire = (payload: SendReportPayload): SendReportV4 => payload;
 
 export const sendFeedbackWire = (payload: SendFeedbackPayload): SendFeedbackV1 => payload;
 

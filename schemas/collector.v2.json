@@ -1,0 +1,772 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:ambitious:audit:schema:collector:v2",
+  "title": "Collector input, version 2",
+  "description": "Snapshot input from the account tools. Record each unknown value as null and mark the corresponding visibility entry false or partial. Copy bot and connector display names as the account shows them. Keep tokens, credentials and transcripts out of every field.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "collectedAt",
+    "account",
+    "bots",
+    "routines",
+    "connectors",
+    "tasks",
+    "pages",
+    "visibility",
+    "evidence"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 2
+    },
+    "collectedAt": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "account": {
+      "type": "object",
+      "description": "The account the bot looked at.",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "label"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "owner",
+            "guest",
+            "team",
+            "unknown"
+          ],
+          "description": "How the bot is attached to the account. Use unknown when no tool reported the role and the account holder has not stated it. Never infer the role from what the bot can or cannot see. With unknown, the audit runs in partial-visibility mode: recommendations that depend on the role are withheld, their findings are marked, and the report states that the role is unknown. Advice about this bot's own connectors (one that needs to be signed in again, or one this bot has no access to) does not depend on the role and is still given."
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "description": "A short display label for the account."
+        }
+      }
+    },
+    "bots": {
+      "type": "array",
+      "maxItems": 200,
+      "description": "The bots the collector could list.",
+      "items": {
+        "$ref": "#/$defs/bot"
+      }
+    },
+    "routines": {
+      "type": "array",
+      "maxItems": 1000,
+      "description": "The routines the collector could list.",
+      "items": {
+        "$ref": "#/$defs/routine"
+      }
+    },
+    "connectors": {
+      "type": "array",
+      "maxItems": 200,
+      "description": "The connectors the collector could list.",
+      "items": {
+        "$ref": "#/$defs/connector"
+      }
+    },
+    "tasks": {
+      "type": "object",
+      "description": "Task counts. They come from the output of the ambitious-tasks module, which keeps the bot's task list. When that module is not installed, or its output was not read, every count is null. Never estimate a count.",
+      "additionalProperties": false,
+      "required": [
+        "open",
+        "stale7d",
+        "blocked"
+      ],
+      "properties": {
+        "open": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1000000,
+          "description": "Open tasks, or null when not observed."
+        },
+        "stale7d": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1000000,
+          "description": "Open tasks with no change in 7 days, or null when not observed."
+        },
+        "blocked": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1000000,
+          "description": "Blocked tasks, or null when not observed."
+        },
+        "closed7d": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1000000,
+          "description": "Tasks closed in the last seven days, or null when unobserved."
+        }
+      }
+    },
+    "pages": {
+      "type": "object",
+      "description": "Page counts. A count the bot could not read is null.",
+      "additionalProperties": false,
+      "required": [
+        "count",
+        "updated7d"
+      ],
+      "properties": {
+        "count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1000000,
+          "description": "Pages in the account, or null when not observed."
+        },
+        "updated7d": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1000000,
+          "description": "Pages updated in the last 7 days, or null when not observed."
+        }
+      }
+    },
+    "usageOther": {
+      "type": "object",
+      "description": "The one line an account's usage report gives for all the bots it did not list by name, when it lists only the bots that used the most and sums the rest. It covers the same period as the bots' usage in share form, so at least one bot must carry such a usage. Leave it out when the report had no such line. A bot counted in this line has usage null, because its own share was not observed.",
+      "additionalProperties": false,
+      "required": [
+        "share"
+      ],
+      "properties": {
+        "share": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "The summed share of all the account's bot usage in the period, from 0 to 1, that went to the bots not listed by name."
+        },
+        "botCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000,
+          "description": "How many bots the line sums, when the report says so."
+        }
+      }
+    },
+    "weeklyLimitUsed": {
+      "type": "object",
+      "description": "How much of the account's weekly usage limit has been used in the current week, when the account reports it. Leave it out otherwise. It is never worked out from shares.",
+      "additionalProperties": false,
+      "required": [
+        "percent",
+        "asOf"
+      ],
+      "properties": {
+        "percent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000,
+          "description": "The percentage of the weekly limit used so far, as the account reports it. 100 means the whole limit."
+        },
+        "asOf": {
+          "$ref": "#/$defs/timestamp",
+          "description": "When the percentage was read, in UTC."
+        }
+      }
+    },
+    "visibility": {
+      "$ref": "#/$defs/visibility"
+    },
+    "evidence": {
+      "type": "array",
+      "maxItems": 200,
+      "description": "Short pieces of evidence that findings and recommendations cite by id.",
+      "items": {
+        "$ref": "#/$defs/evidence"
+      }
+    },
+    "planUsage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "weeklyLimitUsedPercent",
+        "extraCreditsLeftUsd",
+        "observedAt",
+        "period"
+      ],
+      "properties": {
+        "weeklyLimitUsedPercent": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Percentage of the weekly limit consumed, as shown by the usage report."
+        },
+        "extraCreditsLeftUsd": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1000000000,
+          "multipleOf": 0.01,
+          "description": "Remaining extra credits in USD, to the nearest cent as reported."
+        },
+        "observedAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 24,
+          "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]{1,3})?Z$",
+          "description": "UTC observation time supplied with the plan readings, or null."
+        },
+        "period": {
+          "enum": [
+            "this_week",
+            "last_7_days",
+            "last_30_days",
+            null
+          ],
+          "description": "Period for the plan readings, or null when unavailable."
+        }
+      },
+      "description": "Plan readings from the platform usage report. Record each missing value as null."
+    }
+  },
+  "$defs": {
+    "timestamp": {
+      "type": "string",
+      "maxLength": 24,
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]{1,3})?Z$",
+      "description": "An instant in UTC, written as YYYY-MM-DDTHH:MM:SSZ with optional milliseconds."
+    },
+    "lastSeen": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 24,
+      "pattern": "^(never|[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]{1,3})?Z)$",
+      "description": "An instant in UTC written as YYYY-MM-DDTHH:MM:SSZ with optional milliseconds, the word never when the account shows it has not happened yet, or null when the bot could not observe it."
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "An identifier as the account shows it."
+    },
+    "usage": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "unit",
+        "amount7d"
+      ],
+      "description": "A routine's usage over the 7 days before collectedAt, or null when it was not observed. The visibility signal usage counts as seen only when usage was observed for every listed bot and every listed routine.",
+      "properties": {
+        "unit": {
+          "enum": [
+            "credits",
+            "percent"
+          ],
+          "description": "credits when the account reports credits used; percent when it reports a share of the account's total usage."
+        },
+        "amount7d": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000000000,
+          "description": "Credits used, or the percentage share from 0 to 100, in the last 7 days."
+        }
+      }
+    },
+    "botUsage": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "unit"
+      ],
+      "description": "Record credits or percentage for the last seven days, or a share from the platform usage report for the named period. Record an exact share or an exclusive upper bound. Use null when the bot has no individual reading.",
+      "properties": {
+        "unit": {
+          "enum": [
+            "credits",
+            "percent",
+            "share"
+          ],
+          "description": "credits when the account reports credits used in the last 7 days; percent when it reports a percentage of the account's usage in the last 7 days; share when it reports the bot's share of all bot usage in a named period."
+        },
+        "amount7d": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000000000,
+          "description": "With unit credits or percent only: credits used, or the percentage from 0 to 100, in the last 7 days."
+        },
+        "period": {
+          "enum": [
+            "this_week",
+            "last_7_days",
+            "last_30_days"
+          ],
+          "description": "With unit share only: the period the share covers. this_week is the current week so far, last_7_days and last_30_days are the 7 or 30 days before the report was read."
+        },
+        "periodStart": {
+          "$ref": "#/$defs/timestamp",
+          "description": "With unit share only: when the period starts, in UTC, if the usage report says so."
+        },
+        "periodEnd": {
+          "$ref": "#/$defs/timestamp",
+          "description": "With unit share only: when the period ends, in UTC, if the usage report says so."
+        },
+        "share": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "With unit share only: the bot's share of all the account's bot usage in the period, from 0 to 1, as the usage report gives it. A report that shows 42% is written as 0.42. Write 0 only when the report lists the bot with no usage."
+        },
+        "shareBelow": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "description": "Exclusive upper bound as displayed. Write 0.01 for <1%."
+        }
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "amount7d"
+          ],
+          "properties": {
+            "unit": {
+              "enum": [
+                "credits",
+                "percent"
+              ]
+            },
+            "share": false,
+            "shareBelow": false,
+            "period": false,
+            "periodStart": false,
+            "periodEnd": false,
+            "amount7d": true
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "period",
+            "share"
+          ],
+          "properties": {
+            "unit": {
+              "enum": [
+                "share"
+              ]
+            },
+            "amount7d": false,
+            "shareBelow": false,
+            "period": true,
+            "share": true
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "period",
+            "shareBelow"
+          ],
+          "properties": {
+            "unit": {
+              "enum": [
+                "share"
+              ]
+            },
+            "amount7d": false,
+            "share": false,
+            "period": true,
+            "shareBelow": true
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "bot": {
+      "type": "object",
+      "description": "One bot.",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "lastActiveAt",
+        "routineCount",
+        "usage"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "description": "The bot's display name as the account shows it."
+        },
+        "lastActiveAt": {
+          "$ref": "#/$defs/lastSeen"
+        },
+        "routineCount": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 100000,
+          "description": "How many routines the bot has, or null when not observed."
+        },
+        "usage": {
+          "$ref": "#/$defs/botUsage"
+        }
+      }
+    },
+    "routine": {
+      "type": "object",
+      "description": "One routine.",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "botId",
+        "schedule",
+        "state",
+        "lastRunAt",
+        "usage"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "botId": {
+          "$ref": "#/$defs/id"
+        },
+        "schedule": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "The schedule as the account shows it."
+        },
+        "state": {
+          "enum": [
+            "active",
+            "paused",
+            "failing"
+          ],
+          "description": "The routine's current state. For a paused routine, give pausedAt when the account shows when it was paused."
+        },
+        "lastRunAt": {
+          "$ref": "#/$defs/lastSeen"
+        },
+        "pausedAt": {
+          "$ref": "#/$defs/timestamp",
+          "description": "When the routine was paused, in UTC, if the account shows it. Leave it out when the account does not show it; never work it out from another time. A paused routine is reported as paused for a number of days only when this is given."
+        },
+        "createdAt": {
+          "$ref": "#/$defs/timestamp",
+          "description": "When the routine was created, in UTC, if the account shows it. Leave it out otherwise."
+        },
+        "usage": {
+          "$ref": "#/$defs/usage"
+        },
+        "lastError": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 280,
+          "description": "A short excerpt of the last error."
+        },
+        "runs7d": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1000000,
+          "description": "Total runs of this routine in the last seven days, or null when unobserved."
+        },
+        "failedRuns7d": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1000000,
+          "description": "Failed runs of this routine in the last seven days, or null when unobserved."
+        }
+      }
+    },
+    "connector": {
+      "type": "object",
+      "description": "One connector.",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "status"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "description": "The connector's display name as the account shows it."
+        },
+        "status": {
+          "enum": [
+            "ok",
+            "needsAuth",
+            "needsGrant",
+            "initializing",
+            "error"
+          ],
+          "description": "The connector's current status: ok (working), needsAuth (it must be signed in again), needsGrant (it is connected, but this bot has not been given access to it), initializing (still being set up), error (failing for another reason)."
+        }
+      }
+    },
+    "visibilityEntry": {
+      "type": "object",
+      "description": "Whether one kind of information was visible to the bot.",
+      "additionalProperties": false,
+      "required": [
+        "signal",
+        "seen",
+        "why"
+      ],
+      "properties": {
+        "signal": {
+          "enum": [
+            "transcripts",
+            "usage",
+            "otherBots",
+            "auditLog",
+            "accountRole",
+            "tasks",
+            "pages",
+            "botActivity",
+            "routines"
+          ],
+          "description": "The observed signal. usage covers bot, routine and plan readings. tasks includes closures. routines covers inventory, last runs and seven-day run and failure counts."
+        },
+        "seen": {
+          "enum": [
+            true,
+            false,
+            "partial"
+          ],
+          "description": "Use true for complete observation, false for no observation and partial for incomplete observation. Explain the missing information in why."
+        },
+        "why": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 280,
+          "description": "Plain words: how it was seen, or why it could not be."
+        }
+      }
+    },
+    "visibility": {
+      "type": "array",
+      "description": "The visibility map: exactly one entry for each signal, so nothing unseen is left out.",
+      "minItems": 9,
+      "maxItems": 9,
+      "items": {
+        "$ref": "#/$defs/visibilityEntry"
+      },
+      "allOf": [
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "signal"
+            ],
+            "properties": {
+              "signal": {
+                "const": "transcripts"
+              }
+            }
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "signal"
+            ],
+            "properties": {
+              "signal": {
+                "const": "usage"
+              }
+            }
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "signal"
+            ],
+            "properties": {
+              "signal": {
+                "const": "otherBots"
+              }
+            }
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "signal"
+            ],
+            "properties": {
+              "signal": {
+                "const": "auditLog"
+              }
+            }
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "signal"
+            ],
+            "properties": {
+              "signal": {
+                "const": "accountRole"
+              }
+            }
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "signal"
+            ],
+            "properties": {
+              "signal": {
+                "const": "tasks"
+              }
+            }
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "signal"
+            ],
+            "properties": {
+              "signal": {
+                "const": "pages"
+              }
+            }
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "signal"
+            ],
+            "properties": {
+              "signal": {
+                "const": "botActivity"
+              }
+            }
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "required": [
+              "signal"
+            ],
+            "properties": {
+              "signal": {
+                "const": "routines"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "evidence": {
+      "type": "object",
+      "description": "One piece of evidence.",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "text",
+        "source"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/evidenceId"
+        },
+        "kind": {
+          "enum": [
+            "excerpt",
+            "count"
+          ],
+          "description": "A short quote, or a number with its unit."
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 280,
+          "description": "The evidence itself, at most 280 characters."
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "The bot id, routine id, connector name or tool the evidence came from. Use tasks for evidence about task counts. A rule cites evidence whose source equals the thing it is about."
+        }
+      }
+    },
+    "evidenceId": {
+      "type": "string",
+      "maxLength": 9,
+      "pattern": "^ev-[1-9][0-9]{0,5}$",
+      "description": "The id of one piece of evidence, such as ev-1."
+    }
+  }
+}

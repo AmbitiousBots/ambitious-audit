@@ -88,14 +88,14 @@ export const ruleFinding = (item: RuleHit): Finding => ({
 
 const visibilityFindings = (visibility: VisibilityMap): readonly Finding[] =>
   visibility
-    .filter((entry) => !entry.seen)
+    .filter((entry) => entry.seen !== true)
     .map((entry) => ({
       kind: "visibility" as const,
       ruleId: visibilityRuleId(entry.signal),
       severity: "low" as const,
       priority: "low" as const,
       evidenceIds: [],
-      summary: `Not observed: ${SIGNALS[entry.signal].name}. Findings cover only what the bot could see.`,
+      summary: entry.seen === "partial" ? `Partially observed: ${SIGNALS[entry.signal].name}.` : `Not observed: ${SIGNALS[entry.signal].name}. Findings cover only what the bot could see.`,
     }));
 
 export const findingsFrom = (snapshot: CollectorInput, hits: readonly RuleHit[]): readonly Finding[] =>
@@ -121,13 +121,18 @@ export const recommendationsFrom = (hits: readonly RuleHit[], suppressed: Readon
 };
 
 const summaryOf = (findings: readonly Finding[], visibility: VisibilityMap, withheld: number): string => {
-  const unseen = visibility.filter((entry) => !entry.seen).map((entry) => SIGNALS[entry.signal].name);
+  const partial = visibility.filter((entry) => entry.seen === "partial").map((entry) => SIGNALS[entry.signal].name);
+  const unseen = visibility.filter((entry) => entry.seen === false).map((entry) => SIGNALS[entry.signal].name);
   const fromRules = findings.filter((finding) => finding.kind === "rule");
   const body = fromRules.length === 0 ? "No rule matched what the bot could observe." : fromRules.map((finding) => finding.summary).join(" ");
-  const role = visibility.some((entry) => entry.signal === "accountRole" && !entry.seen)
+  const role = visibility.some((entry) => entry.signal === "accountRole" && entry.seen !== true)
     ? ` The account role is unknown, so recommendations that depend on it are withheld (${withheld} in this report).`
     : "";
-  const tail = unseen.length === 0 ? "Every listed signal was visible." : `Not observed: ${unseen.join(", ")}.`;
+  const gaps = [
+    ...(unseen.length ? [`Not observed: ${unseen.join(", ")}.`] : []),
+    ...(partial.length ? [`Partially observed: ${partial.join(", ")}.`] : []),
+  ];
+  const tail = gaps.length ? gaps.join(" ") : "Every listed signal was visible.";
   const summary = `${body}${role} ${tail}`;
   return summary.length <= WIRE_LIMITS.summaryCharacters ? summary : `${summary.slice(0, WIRE_LIMITS.summaryCharacters - 1)}…`;
 };
@@ -153,13 +158,59 @@ const evidenceOf = (snapshot: CollectorInput, findings: readonly Finding[], reco
   return rows.slice(0, 30);
 };
 
+const reportBot = (bot: CollectorInput["bots"][number]): SendReportPayload["bots"][number] => {
+  const row = { name: bot.name, lastActiveAt: bot.lastActiveAt, routineCount: bot.routineCount };
+  const usage = bot.usage;
+  if (usage?.unit === "share") {
+    return "share" in usage
+      ? { ...row, usageShare: usage.share, usageShareBelow: null, usagePeriod: usage.period }
+      : { ...row, usageShare: null, usageShareBelow: usage.shareBelow, usagePeriod: usage.period };
+  }
+  if (usage?.unit === "percent") return { ...row, usageShare: usage.amount7d / 100, usageShareBelow: null, usagePeriod: "last_7_days" };
+  return { ...row, usageShare: null, usageShareBelow: null, usagePeriod: null };
+};
+
+const planUsageOf = (snapshot: CollectorInput): SendReportPayload["planUsage"] => {
+  if (snapshot.planUsage !== undefined) return snapshot.planUsage;
+  const legacy = snapshot.weeklyLimitUsed;
+  if (!legacy || legacy.percent > 100) return null;
+  return { weeklyLimitUsedPercent: legacy.percent, extraCreditsLeftUsd: null, observedAt: legacy.asOf, period: "this_week" };
+};
+
+const completeRoutineList = (snapshot: CollectorInput): boolean => {
+  const coverage = snapshot.visibility.find((entry) => entry.signal === "routines")?.seen;
+  if (coverage === true) return true;
+  if (coverage === false && (snapshot.schemaVersion === 2 || !snapshot.routines.length)) return false;
+  if (!snapshot.bots.length || !snapshot.visibility.some((entry) => entry.signal === "otherBots" && entry.seen === true)) return false;
+  // WHY: A partial routines signal can mean only run history is missing. Per-bot inventory can still establish a complete list.
+  const listed = new Map<string, number>();
+  for (const routine of snapshot.routines) listed.set(routine.botId, (listed.get(routine.botId) ?? 0) + 1);
+  for (const bot of snapshot.bots) {
+    if (bot.routineCount !== (listed.get(bot.id) ?? 0)) return false;
+    listed.delete(bot.id);
+  }
+  return listed.size === 0;
+};
+
+const routineCounts = (snapshot: CollectorInput): SendReportPayload["counts"]["routines"] => {
+  if (!completeRoutineList(snapshot)) return { active: null, paused: null, failing: null, runs7d: null, failedRuns7d: null };
+  const states = { active: 0, paused: 0, failing: 0 };
+  for (const routine of snapshot.routines) states[routine.state]++;
+  const sum = (field: "runs7d" | "failedRuns7d"): number | null => {
+    let total = 0;
+    for (const routine of snapshot.routines) {
+      const count = routine[field];
+      if (count === null || count === undefined) return null;
+      total += count;
+    }
+    return total;
+  };
+  return { ...states, runs7d: sum("runs7d"), failedRuns7d: sum("failedRuns7d") };
+};
+
 const countsOf = (snapshot: CollectorInput): SendReportPayload["counts"] => ({
   bots: snapshot.bots.length,
-  routines: {
-    active: snapshot.routines.filter((routine) => routine.state === "active").length,
-    paused: snapshot.routines.filter((routine) => routine.state === "paused").length,
-    failing: snapshot.routines.filter((routine) => routine.state === "failing").length,
-  },
+  routines: routineCounts(snapshot),
   connectors: {
     ok: snapshot.connectors.filter((connector) => connector.status === "ok").length,
     needsAuth: snapshot.connectors.filter((connector) => connector.status === "needsAuth").length,
@@ -167,7 +218,7 @@ const countsOf = (snapshot: CollectorInput): SendReportPayload["counts"] => ({
     initializing: snapshot.connectors.filter((connector) => connector.status === "initializing").length,
     error: snapshot.connectors.filter((connector) => connector.status === "error").length,
   },
-  tasks: { open: snapshot.tasks.open, stale7d: snapshot.tasks.stale7d, blocked: snapshot.tasks.blocked },
+  tasks: { open: snapshot.tasks.open, stale7d: snapshot.tasks.stale7d, blocked: snapshot.tasks.blocked, closed7d: snapshot.tasks.closed7d ?? null },
   pages: { count: snapshot.pages.count, updated7d: snapshot.pages.updated7d },
 });
 
@@ -190,12 +241,15 @@ export const assembleReport = (
   const recommendations = capRecommendations(ranked.map((item) => item.recommendation));
   const visibility = visibilityOf(snapshot);
   const payload: SendReportPayload = {
-    schemaVersion: 3,
+    schemaVersion: 4,
     reportId,
     period: { from: formatTimestamp(addDays(collected, -7)), to: formatTimestamp(collected) },
     accountKind: snapshot.account.kind,
     summary: summaryOf(findings, visibility, withheldRules(hits).length),
     counts: countsOf(snapshot),
+    bots: snapshot.bots.map(reportBot),
+    connectors: snapshot.connectors,
+    planUsage: planUsageOf(snapshot),
     findings,
     recommendations,
     announcements: selectAnnouncements(announcements),

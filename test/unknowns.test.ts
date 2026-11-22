@@ -12,19 +12,19 @@ import type { VisibilitySignal } from "../src/domain/types.ts";
 
 const base: unknown = JSON.parse(
   JSON.stringify({
-    schemaVersion: 1,
+    schemaVersion: 2,
     collectedAt: "2026-11-15T00:00:00Z",
     account: { kind: "owner", label: "Main" },
     bots: [{ id: "bot-1", name: "Helper", lastActiveAt: "never", routineCount: 2, usage: { unit: "percent", amount7d: 0 } }],
     routines: [
-      { id: "routine-1", botId: "bot-1", schedule: "every day at 08:00", state: "paused", lastRunAt: "2026-11-01T00:00:00Z", pausedAt: "2026-11-02T00:00:00Z", usage: { unit: "percent", amount7d: 0 } },
-      { id: "routine-2", botId: "bot-1", schedule: "every day at 08:00", state: "failing", lastRunAt: "2026-11-14T08:00:00Z", usage: { unit: "percent", amount7d: 0 } },
+      { id: "routine-1", botId: "bot-1", schedule: "every day at 08:00", runs7d: 0, failedRuns7d: 0, state: "paused", lastRunAt: "2026-11-01T00:00:00Z", pausedAt: "2026-11-02T00:00:00Z", usage: { unit: "percent", amount7d: 0 } },
+      { id: "routine-2", botId: "bot-1", schedule: "every day at 08:00", runs7d: 0, failedRuns7d: 0, state: "failing", lastRunAt: "2026-11-14T08:00:00Z", usage: { unit: "percent", amount7d: 0 } },
     ],
     connectors: [
       { name: "calendar", status: "needsAuth" },
       { name: "documents", status: "needsGrant" },
     ],
-    tasks: { open: 4, stale7d: 2, blocked: 1 },
+    tasks: { closed7d: 0, open: 4, stale7d: 2, blocked: 1 },
     pages: { count: 3, updated7d: 1 },
     visibility: ["transcripts", "usage", "otherBots", "auditLog", "accountRole", "tasks", "pages", "botActivity", "routines"].map((signal) => ({ signal, seen: true, why: "Read with the bot's own tools." })),
     evidence: [

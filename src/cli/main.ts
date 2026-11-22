@@ -8,6 +8,8 @@ import { COMMAND_INPUT_SCHEMAS, INPUT_COMMANDS, type InputCommand } from "../dom
 import { parseBaselineSet, parseCollector, parseDiff, parseFeedback, parseFindings, parseRecommend, parseReportBuild, parseReportMark, unparsed } from "../domain/input.ts";
 import { asJsonObject } from "../domain/json-value.ts";
 
+import reportSchema from "../../schemas/send_report.v4.json" with { type: "json" };
+
 const identity = embedded();
 
 const schemaCommand = (command: InputCommand) =>
@@ -52,6 +54,7 @@ await runCli({
       run: ({ input, clock, rng }) => asJsonObject(assembleFeedback(input, rng, clock.now().getTime(), sha256Hex)),
     }),
     schema: schemaCommand("snapshot"),
+    "schema send report": pureCommand({ run: () => asJsonObject({ output: "send_report", schema: reportSchema }) }),
     "schema snapshot": schemaCommand("snapshot"),
     "schema baseline set": schemaCommand("baseline set"),
     "schema diff": schemaCommand("diff"),
