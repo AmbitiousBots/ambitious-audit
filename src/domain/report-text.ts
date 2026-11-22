@@ -1,30 +1,25 @@
-import { WIRE_LIMITS } from "./types.ts";
+const allowedName = /^(?:\p{L}\p{M}*|[0-9 &',-])+$/u;
+const credentialWord = /^(?:token|secret|password|passwd|pwd|bearer|otp|pin|key|code|apikey|privatekey|auth|authorization|credentials?|session|sk|pat|glpat)$/iu;
 
-const allowedCharacters = /^[\p{L}0-9 &'().,-]+$/u;
-const credentialWord = /^(?:token|secret|password|passwd|pwd|bearer|otp|apikey|privatekey|auth|authorization|credentials?|session|sk|pat)$/iu;
+const displayName = (value: string): string | null => {
+  const name = value.normalize("NFKC").replaceAll("’", "'");
+  if ([...name].length > 40 || !allowedName.test(name) || !/\p{L}/u.test(name)) return null;
+  if ((name.match(/[0-9]/gu)?.length ?? 0) > 2) return null;
+  const words = name.match(/[\p{L}\p{M}0-9]+/gu) ?? [];
+  if (words.length > 5 || words.some((word) => (word.match(/\p{L}/gu)?.length ?? 0) > 16)) return null;
 
-const allowedText = (value: string, field: "name" | "observation"): string | null => {
-  const text = value.normalize("NFKC");
-  if ([...text].length > (field === "name" ? WIRE_LIMITS.reportNameCharacters : WIRE_LIMITS.reportObservationCharacters) || !allowedCharacters.test(text) || !/[\p{L}0-9]/u.test(text)) return null;
-  const words = text.match(/[\p{L}0-9]+/gu) ?? [];
-  const labels = text.replace(/(\p{Ll})(\p{Lu})/gu, "$1 $2").replace(/(\p{Lu})(\p{Lu}\p{Ll})/gu, "$1 $2");
-  if (labels.match(/\p{L}+/gu)?.some((word) => credentialWord.test(word)) ||
-      /(?:^|[^\p{L}])(?:api|private)[ -]+key(?!\p{L})|(?:^|[^\p{L}])key[ ().,'-]*\d/iu.test(labels)) return null;
-
+  const labels = name.normalize("NFD").replace(/\p{M}/gu, "")
+    .replace(/(\p{Ll})(\p{Lu})/gu, "$1 $2").replace(/(\p{Lu})(\p{Lu}\p{Ll})/gu, "$1 $2");
+  if (labels.match(/\p{L}+/gu)?.some((word) => credentialWord.test(word))) return null;
   for (const [index, word] of words.entries()) {
+    if (/\d/u.test(word) && /\p{Lu}/u.test(word) && !/\p{Ll}/u.test(word)) return null;
     const next = words[index + 1];
     if (/^(?:basic|digest)$/iu.test(word) && next && !/^\p{Lu}\p{Ll}+$/u.test(next)) return null;
   }
-  if (field === "name") {
-    if ((text.match(/\d/gu)?.length ?? 0) > 4 || /\d{3}/u.test(text)) return null;
-    if (words.some((word) => /\d/u.test(word) && /\p{Lu}/u.test(word) && !/\p{Ll}/u.test(word))) return null;
-  } else if (/\d{5}|\d[ ().,'-]+\d|[\p{L}-]\d|\d[\p{L}-]/u.test(text)) return null;
-  return text;
+  return name;
 };
 
-export const reportObservation = (value: string): string | null => allowedText(value, "observation");
-
 export const reportName = (value: string, kind: "Bot" | "Connector", index: number) => {
-  const name = allowedText(value, "name");
+  const name = displayName(value);
   return name === null ? { name: `${kind} ${index + 1}`, nameWithheld: true as const } : { name };
 };

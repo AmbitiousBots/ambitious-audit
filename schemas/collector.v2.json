@@ -564,8 +564,7 @@
       "additionalProperties": false,
       "required": [
         "signal",
-        "seen",
-        "why"
+        "seen"
       ],
       "properties": {
         "signal": {
@@ -588,13 +587,21 @@
             false,
             "partial"
           ],
-          "description": "Use true for complete observation, false for no observation and partial for incomplete observation. Explain the missing information in why."
+          "description": "Use true for complete observation, false for no observation and partial for incomplete observation."
         },
         "why": {
           "type": "string",
           "minLength": 1,
           "maxLength": 280,
-          "description": "Plain words: how it was seen, or why it could not be."
+          "description": "Optional local note. Reports derive the explanation from readings, coverage and scope."
+        },
+        "scope": {
+          "enum": [
+            "all",
+            "shared_only",
+            "limited"
+          ],
+          "description": "Reported access to the whole account, shared folders only, or another restricted view. Omit when unknown."
         }
       }
     },
@@ -733,12 +740,12 @@
       "required": [
         "id",
         "kind",
-        "text",
         "source"
       ],
       "properties": {
         "id": {
-          "$ref": "#/$defs/evidenceId"
+          "$ref": "#/$defs/evidenceId",
+          "description": "Snapshot-local reference. Reports assign their own citation IDs."
         },
         "kind": {
           "enum": [
@@ -751,13 +758,22 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 280,
-          "description": "The evidence itself, at most 280 characters."
+          "description": "Optional local note about the reading."
         },
         "source": {
           "type": "string",
           "minLength": 1,
           "maxLength": 128,
-          "description": "The bot id, routine id, connector name or tool the evidence came from. Use tasks for evidence about task counts. A rule cites evidence whose source equals the thing it is about."
+          "description": "Local reference within sourceKind: bot ID, routine ID, connector name, or tasks. Never sent in the report."
+        },
+        "sourceKind": {
+          "enum": [
+            "bot",
+            "routine",
+            "connector",
+            "tasks"
+          ],
+          "description": "Required for rule citations. Select the inventory that owns the reading, or tasks for task counts."
         }
       }
     },

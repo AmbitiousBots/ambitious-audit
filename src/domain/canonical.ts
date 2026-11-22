@@ -1,9 +1,9 @@
 import { isRecord } from "@ambitious/kit/domain/json";
-import { reportCoverage } from "./coverage.ts";
+import { observedPlan, reportCoverage } from "./coverage.ts";
 import { pointerOf, refuseProblems, type FieldProblem } from "./field-problems.ts";
-import { VISIBILITY_SIGNALS, type CollectorInput, type VisibilityEntry, type VisibilityMap, type VisibilitySignal } from "./types.ts";
+import { VISIBILITY_SIGNALS, type CollectorInput, type VisibilityMap, type VisibilitySignal } from "./types.ts";
 import { parseTimestamp } from "./time.ts";
-import type { CollectorV2Bot, CollectorV2BotUsage, CollectorV2Connector, CollectorV2Evidence, CollectorV2Routine, CollectorV2Usage } from "./wire.generated.ts";
+import type { CollectorV2Bot, CollectorV2BotUsage, CollectorV2Connector, CollectorV2Routine, CollectorV2Usage } from "./wire.generated.ts";
 
 const compareText = (left: string, right: string): number => (left < right ? -1 : left > right ? 1 : 0);
 
@@ -53,10 +53,9 @@ export const canonicalJson = (value: unknown): string => {
   return JSON.stringify(ordered(value));
 };
 
-const orderedVisibility = (input: CollectorInput): VisibilityMap =>
-  VISIBILITY_SIGNALS.flatMap((signal) => input.visibility.filter((entry) => entry.signal === signal).slice(0, 1)).map(
-    (entry): VisibilityEntry => ({ signal: entry.signal, seen: entry.seen, why: entry.why }),
-  );
+const orderedVisibility = (input: CollectorInput): CollectorInput["visibility"] =>
+  VISIBILITY_SIGNALS.flatMap((signal) => input.visibility.filter((entry) => entry.signal === signal).slice(0, 1))
+    .map(({ signal, seen, why, scope }) => ({ signal, seen, ...(why === undefined ? {} : { why }), ...(scope === undefined ? {} : { scope }) }));
 
 export const visibilityOf = (input: CollectorInput): VisibilityMap =>
   orderedVisibility(input).map((entry) => reportCoverage(input, entry));
@@ -75,7 +74,7 @@ export const notObserved = (input: CollectorInput): Readonly<Record<Exclude<Visi
         nullAt(routine.runs7d, "routines", index, "runs7d"), nullAt(routine.failedRuns7d, "routines", index, "failedRuns7d")]),
     ]),
     usage: where([
-      ...Object.entries(input.planUsage ?? {}).map(([key, value]) => nullAt(value, "planUsage", key)),
+      ...Object.entries(observedPlan(input) ?? {}).map(([key, value]) => nullAt(value, "planUsage", key)),
       ...input.bots.map((bot, index) => nullAt(bot.usage, "bots", index, "usage")),
       ...input.routines.map((routine, index) => nullAt(routine.usage, "routines", index, "usage")),
     ]),
@@ -95,7 +94,7 @@ const gapProblems = (input: CollectorInput): readonly FieldProblem[] => {
         pointer: pointerOf(["visibility", index, "seen"]),
         rule: "null-needs-visibility-gap",
         must: `must be ${allowed}, because ${reason}`,
-        help: `Set seen to ${allowed} for the signal "${entry.signal}" and say why, or give the value that was observed. Never write zero or a guess for a value that was not observed.`,
+        help: `Set seen to ${allowed} for the signal "${entry.signal}", or give the value that was observed. Never write zero or a guess for a value that was not observed.`,
       });
     }
     if (entry.signal === "accountRole" && entry.seen !== true && first === undefined) {
@@ -178,8 +177,10 @@ export const normalizeCollector = (input: CollectorInput, schemaCommand: string)
   const connectors: readonly CollectorV2Connector[] = input.connectors
     .map((connector) => ({ name: connector.name, status: connector.status }))
     .sort((left, right) => compareText(left.name, right.name));
-  const evidence: readonly CollectorV2Evidence[] = input.evidence
-    .map((item) => ({ id: item.id, kind: item.kind, text: item.text, source: item.source }))
+  const planUsage = observedPlan(input);
+  const evidence = input.evidence.map(({ id, kind, text, source, sourceKind }) => ({
+    id, kind, ...(text === undefined ? {} : { text }), source, ...(sourceKind === undefined ? {} : { sourceKind }),
+  }))
     .sort((left, right) => compareText(left.id, right.id));
   return {
     schemaVersion: input.schemaVersion,
@@ -197,11 +198,10 @@ export const normalizeCollector = (input: CollectorInput, schemaCommand: string)
       ? {}
       : { usageOther: { share: input.usageOther.share, ...(input.usageOther.botCount === undefined ? {} : { botCount: input.usageOther.botCount }) } }),
     ...(input.weeklyLimitUsed === undefined ? {} : { weeklyLimitUsed: { percent: input.weeklyLimitUsed.percent, asOf: input.weeklyLimitUsed.asOf } }),
-    ...(input.planUsage === undefined ? {} : { planUsage: { ...input.planUsage } }),
+    ...(planUsage === undefined ? {} : { planUsage: { ...planUsage } }),
     visibility: orderedVisibility(input).map((entry) => {
       if (input.schemaVersion === 1 || !["usage", "tasks", "pages"].includes(entry.signal)) return entry;
-      const coverage = reportCoverage(input, entry);
-      return coverage.seen === entry.seen ? entry : coverage;
+      return { ...entry, seen: reportCoverage(input, entry).seen };
     }),
     evidence,
   };

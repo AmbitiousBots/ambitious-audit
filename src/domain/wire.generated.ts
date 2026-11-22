@@ -40,11 +40,11 @@ export type CollectorV2Routine = { readonly id: CollectorV2Id; readonly botId: C
 
 export type CollectorV2Connector = { readonly name: string; readonly status: "ok" | "needsAuth" | "needsGrant" | "initializing" | "error" };
 
-export type CollectorV2VisibilityEntry = { readonly signal: "transcripts" | "usage" | "otherBots" | "auditLog" | "accountRole" | "tasks" | "pages" | "botActivity" | "routines"; readonly seen: true | false | "partial"; readonly why: string };
+export type CollectorV2VisibilityEntry = { readonly signal: "transcripts" | "usage" | "otherBots" | "auditLog" | "accountRole" | "tasks" | "pages" | "botActivity" | "routines"; readonly seen: true | false | "partial"; readonly why?: string; readonly scope?: "all" | "shared_only" | "limited" };
 
 export type CollectorV2Visibility = readonly CollectorV2VisibilityEntry[];
 
-export type CollectorV2Evidence = { readonly id: CollectorV2EvidenceId; readonly kind: "excerpt" | "count"; readonly text: string; readonly source: string };
+export type CollectorV2Evidence = { readonly id: CollectorV2EvidenceId; readonly kind: "excerpt" | "count"; readonly text?: string; readonly source: string; readonly sourceKind?: "bot" | "routine" | "connector" | "tasks" };
 
 export type CollectorV2EvidenceId = string;
 

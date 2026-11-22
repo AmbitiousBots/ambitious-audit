@@ -1,11 +1,17 @@
-import { reportObservation } from "./report-text.ts";
 import { addDays, observedInstant } from "./time.ts";
 import type { CollectorInput, SendReportPayload, VisibilityEntry } from "./types.ts";
+
+type CollectorVisibility = CollectorInput["visibility"][number];
+
+export const observedPlan = (snapshot: CollectorInput) => {
+  const plan = snapshot.planUsage;
+  return plan && Object.values(plan).some((value) => value !== null) ? plan : undefined;
+};
 
 export const planUsageOf = (snapshot: CollectorInput): SendReportPayload["planUsage"] => {
   const legacy = snapshot.weeklyLimitUsed;
   const legacyPercent = legacy && legacy.percent <= 100 ? legacy.percent : null;
-  const plan = snapshot.planUsage;
+  const plan = observedPlan(snapshot);
   const compatible = plan?.period === "this_week" && plan.observedAt !== null && legacy !== undefined &&
     Date.parse(plan.observedAt) === Date.parse(legacy.asOf);
   if (!plan && legacyPercent === null) return null;
@@ -18,8 +24,16 @@ export const planUsageOf = (snapshot: CollectorInput): SendReportPayload["planUs
   };
 };
 
+const restricted = ({ scope }: CollectorVisibility): boolean => scope === "shared_only" || scope === "limited";
+
+const scopeText = { shared_only: "Access limited to shared folders.", limited: "Access limited to part of the account.", all: "Account-wide access." };
+
+const visibility = (entry: CollectorVisibility, seen: VisibilityEntry["seen"], statement: string): VisibilityEntry => ({
+  signal: entry.signal, seen, why: entry.scope ? `${statement} ${scopeText[entry.scope]}` : statement,
+});
+
 const allBotsListed = (input: CollectorInput): boolean =>
-  input.visibility.some((entry) => entry.signal === "otherBots" && entry.seen === true);
+  input.visibility.some((entry) => entry.signal === "otherBots" && entry.seen === true && !restricted(entry));
 
 export const completeRoutineList = (input: CollectorInput): boolean => {
   const listed = new Map<string, number>();
@@ -29,9 +43,10 @@ export const completeRoutineList = (input: CollectorInput): boolean => {
     listed.delete(bot.id);
   }
 
-  const seen = input.visibility.find((entry) => entry.signal === "routines")?.seen;
+  const entry = input.visibility.find((item) => item.signal === "routines");
+  const seen = entry?.seen;
   if (listed.size > 0 && allBotsListed(input)) return false;
-  if (seen === true) return true;
+  if (entry && seen === true && !restricted(entry)) return true;
   if (seen === false && input.routines.length === 0) return false;
   return allBotsListed(input) && input.bots.length > 0 && listed.size === 0 && input.bots.every((bot) => bot.routineCount !== null);
 };
@@ -51,10 +66,8 @@ type Measure = { label: string; observed: boolean; complete: boolean };
 
 const measure = (label: string, observed: boolean, complete = observed): Measure => ({ label, observed, complete });
 
-const coverage = (entry: VisibilityEntry, observed: boolean, complete: boolean, measures: readonly Measure[]): VisibilityEntry => {
-  const seen = entry.seen === true && complete ? true : observed ? "partial" : false;
-  const explanation = reportObservation(entry.why);
-  if (seen === entry.seen && explanation !== null) return { ...entry, why: explanation };
+const coverage = (entry: CollectorVisibility, observed: boolean, complete: boolean, measures: readonly Measure[]): VisibilityEntry => {
+  const seen = entry.seen === true && complete && !restricted(entry) ? true : observed ? "partial" : false;
 
   const names = (items: readonly Measure[]) => items.map(({ label }) => label).join(", ");
   const known = names(measures.filter((item) => item.observed && item.complete));
@@ -64,19 +77,11 @@ const coverage = (entry: VisibilityEntry, observed: boolean, complete: boolean, 
   if (known) sentences.push(`Observed ${known}.`);
   if (partial) sentences.push(`Partially observed ${partial}.`);
   if (missing) sentences.push(`Missing ${missing}.`);
-  if (seen === "partial" && !partial && !missing) sentences.push("Account-wide coverage is unknown.");
-  if (seen !== entry.seen && explanation) {
-    const sharedOnly = /\b(?:only|limited to|restricted to) (?:the |a )?shared[- ]folders?\b|\bshared[- ]folders? only\b/iu;
-    const scopeStatement = /\b(?:access|scope|view) (?:was |is )?(?:limited|restricted) to\b|\b(?:read|see|view|access) only\b|^only .+ (?:visible|accessible)\b/iu;
-    if (sharedOnly.test(explanation)) sentences.push("Access limited to shared folders.");
-    else if (scopeStatement.test(explanation) && !/[.!?].+\S/u.test(explanation) && sentences.join(" ").length + explanation.length < 200) {
-      sentences.push(explanation);
-    }
-  }
-  return { ...entry, seen, why: sentences.join(" ") || (seen === true ? "The collector reported complete coverage." : "No readings were reported.") };
+  if (seen === "partial" && !entry.scope && !partial && !missing) sentences.push("Account-wide coverage is unknown.");
+  return visibility(entry, seen, sentences.join(" ") || (complete ? "The inventory was empty." : "No readings were reported."));
 };
 
-const usageCoverage = (input: CollectorInput, entry: VisibilityEntry): VisibilityEntry => {
+const usageCoverage = (input: CollectorInput, entry: CollectorVisibility): VisibilityEntry => {
   const plan = planUsageOf(input);
   const planObserved = plan !== null && (plan.weeklyLimitUsedPercent !== null || plan.extraCreditsLeftUsd !== null);
   const planComplete = plan !== null && Object.values(plan).every((value) => value !== null);
@@ -99,9 +104,18 @@ const usageCoverage = (input: CollectorInput, entry: VisibilityEntry): Visibilit
 const inventoryMeasure = <T>(label: string, rows: readonly T[], present: (row: T) => boolean, listed: boolean) =>
   measure(label, rows.some(present), listed && rows.every(present));
 
-export const reportCoverage = (input: CollectorInput, entry: VisibilityEntry): VisibilityEntry => {
-  if (entry.signal === "otherBots" && entry.seen === false && input.bots.length > 1) {
-    return coverage(entry, true, false, [measure("listed bots", true), measure("full bot inventory", false)]);
+export const reportCoverage = (input: CollectorInput, entry: CollectorVisibility): VisibilityEntry => {
+  if (entry.signal === "otherBots" && (input.bots.length > 1 || input.usageOther !== undefined || entry.seen !== false)) {
+    const listed = allBotsListed(input);
+    return coverage(entry, true, listed, [
+      ...(input.bots.length > 0 ? [measure("listed bots", true)] : []),
+      ...(input.usageOther ? [measure("combined other-bot share", true)] : []),
+      measure("full bot inventory", listed),
+    ]);
+  }
+  if (entry.signal === "accountRole") {
+    const known = input.account.kind !== "unknown";
+    return visibility(entry, known, known ? "Observed account role." : "Missing account role.");
   }
   if (entry.signal === "usage") return usageCoverage(input, entry);
   if (entry.signal === "botActivity") {
@@ -128,6 +142,7 @@ export const reportCoverage = (input: CollectorInput, entry: VisibilityEntry): V
     ] : [measure("page count", input.pages.count !== null), measure("seven-day page updates", input.pages.updated7d !== null)];
     return coverage(entry, measures.some((item) => item.observed), measures.every((item) => item.complete), measures);
   }
-  const status = entry.seen === true ? "complete" : entry.seen === "partial" ? "partial" : "unobserved";
-  return { ...entry, why: reportObservation(entry.why) ?? `The collector marked this signal as ${status}.` };
+  const seen = entry.seen === true && restricted(entry) ? "partial" : entry.seen;
+  const status = seen === true ? "complete" : seen === "partial" ? "partial" : "unobserved";
+  return visibility(entry, seen, `The collector marked this signal as ${status}.`);
 };

@@ -206,7 +206,16 @@ test("a partly observed account with an unknown role gets advice about its own c
   assert.deepEqual(dataOf(payload.counts).connectors, { ok: 0, needsAuth: 1, needsGrant: 1, initializing: 1, error: 0 });
   assert.deepEqual(dataOf(payload.counts).tasks, { closed7d: null, open: 14, stale7d: 3, blocked: 1 });
   assert.deepEqual(dataOf(payload.counts).pages, { count: null, updated7d: null });
-  assert.ok(listOf(payload.evidence).some((item) => item.id === "ev-2" && item.source === "tasks"));
+  const taskAdvice = listOf(payload.recommendations).find((item) => item.id === "stale-tasks");
+  assert.deepEqual(taskAdvice?.evidenceIds, ["ev-3"]);
+  assert.ok(listOf(payload.evidence).some((item) => item.id === "ev-3" && item.source === "Task counts"));
+  const db = openDb(join(home, "audit", "audit.sqlite"), { readonly: true });
+  try {
+    const storedTask = db.prepare("SELECT json FROM recommendations WHERE id = ? AND snapshot_id = ?").get("stale-tasks", String(snapshotId));
+    assert.deepEqual(JSON.parse(String(storedTask?.json)).evidenceIds, ["ev-2"]);
+  } finally {
+    db.close();
+  }
   assert.deepEqual(listOf(payload.recommendations).map((item) => item.id), ["connector-needs-auth", "connector-needs-grant", "stale-tasks"]);
   assert.match(String(payload.summary), /recommendations that depend on it are withheld \(1 in this report\)/);
 });

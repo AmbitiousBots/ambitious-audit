@@ -426,5 +426,13 @@
   "send_report.v4/invalid/unexpected-connector-field.json": {
     "keyword": "additionalProperties",
     "at": "/connectors/0"
+  },
+  "collector.v2/invalid/unknown-visibility-scope.json": {
+    "keyword": "enum",
+    "at": "/visibility/0/scope"
+  },
+  "collector.v2/invalid/unknown-evidence-source-kind.json": {
+    "keyword": "enum",
+    "at": "/evidence/0/sourceKind"
   }
 }

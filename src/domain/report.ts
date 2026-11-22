@@ -1,8 +1,9 @@
 import type { Rng } from "@ambitious/kit/domain/clock";
 import { canonicalJson, visibilityOf } from "./canonical.ts";
 import { completeRoutineList, planUsageOf, routineRunCount } from "./coverage.ts";
+import { evidenceSubjects } from "./evidence.ts";
 import { fitReportLists } from "./report-size.ts";
-import { reportName, reportObservation } from "./report-text.ts";
+import { reportName } from "./report-text.ts";
 import type { RuleHit } from "./rules.ts";
 import { isReportPayload } from "./schema.ts";
 import { addDays, formatTimestamp, parseTimestamp } from "./time.ts";
@@ -23,7 +24,7 @@ import type {
   VisibilityMap,
   VisibilitySignal,
 } from "./types.ts";
-import { isRecommendationId, isRuleId, isSemVer, WIRE_LIMITS } from "./types.ts";
+import { isEvidenceId, isRecommendationId, isRuleId, isSemVer, WIRE_LIMITS } from "./types.ts";
 import { entropyHex, reportIdFrom } from "./uuid.ts";
 
 const SEVERITY_ORDER = { high: 0, medium: 1, low: 2 } as const;
@@ -141,7 +142,7 @@ const summaryOf = (findings: readonly Finding[], visibility: VisibilityMap, with
 };
 
 const allocateEvidence = (snapshot: CollectorInput, findings: readonly Finding[], ranked: readonly RankedRecommendation[]) => {
-  const available = new Map<string, CollectorInput["evidence"][number]>(snapshot.evidence.map((row) => [row.id, row]));
+  const available = evidenceSubjects(snapshot);
   const selected = new Set<EvidenceId>();
   const items = [...ranked.map((item) => item.recommendation), ...findings];
   const references = items.map((item) => item.evidenceIds.filter((id) => available.has(id)));
@@ -157,20 +158,23 @@ const allocateEvidence = (snapshot: CollectorInput, findings: readonly Finding[]
   }
 
   const evidence: ReportEvidence[] = [];
-  for (const id of selected) {
-    const row = available.get(id);
-    if (row) evidence.push({
-      id, source: reportObservation(row.source) ?? "Collector",
-      text: reportObservation(row.text) ?? (row.kind === "count" ? "The collector recorded a count." : "The collector recorded an excerpt."),
-    });
+  const reportIds = new Map<EvidenceId, EvidenceId>();
+  for (const localId of selected) {
+    const subject = available.get(localId);
+    const id = `ev-${evidence.length + 1}`;
+    if (!subject || !isEvidenceId(id)) throw new Error("The selected evidence could not be numbered.");
+    reportIds.set(localId, id);
+    evidence.push({ id, source: subject.source, text: subject.text });
   }
-  const retained = (ids: readonly EvidenceId[]) => ids.filter((id) => selected.has(id));
+  const retained = (ids: readonly EvidenceId[]) => ids.flatMap((id) => reportIds.get(id) ?? []);
+  const recommendations = ranked.flatMap((local) => {
+    const evidenceIds = cited(retained(local.recommendation.evidenceIds));
+    return evidenceIds ? [{ local, report: { ...local.recommendation, evidenceIds } }] : [];
+  });
   return {
     findings: findings.map((finding) => ({ ...finding, evidenceIds: retained(finding.evidenceIds) })),
-    ranked: ranked.flatMap(({ fingerprint, recommendation }) => {
-      const evidenceIds = cited(retained(recommendation.evidenceIds));
-      return evidenceIds ? [{ fingerprint, recommendation: { ...recommendation, evidenceIds } }] : [];
-    }),
+    ranked: recommendations.map((item) => item.local),
+    recommendations: capRecommendations(recommendations.map((item) => item.report)),
     evidence,
   };
 };
@@ -246,8 +250,7 @@ export const assembleReport = (
   const collected = parseTimestamp(snapshot.collectedAt);
   if (collected === null) throw new Error("The snapshot collectedAt is not a UTC timestamp.");
   const visibility = visibilityOf(snapshot);
-  const { findings, ranked, evidence } = allocateEvidence(snapshot, findingsFrom(snapshot, hits, visibility), recommendationsFrom(hits, suppressed));
-  const recommendations = capRecommendations(ranked.map((item) => item.recommendation));
+  const { findings, ranked, evidence, recommendations } = allocateEvidence(snapshot, findingsFrom(snapshot, hits, visibility), recommendationsFrom(hits, suppressed));
   const payload = fitReportLists({
     schemaVersion: 4,
     reportId,

@@ -250,5 +250,12 @@ test("weekly exact shares and bounds need six days of overlap with the snapshot 
   assert.equal(matches({ periodStart: "2026-11-09T00:00:01Z" }), false);
   assert.equal(matches({ periodStart: "2026-11-09T00:00:00Z" }), true);
   assert.equal(matches({ periodEnd: "2026-11-14T00:00:00Z" }), true);
+  for (const [start, end, qualifies] of [
+    ["2026-09-01T00:00:00Z", "2026-11-14T00:00:00Z", false],
+    ["2026-11-06T23:59:59Z", "2026-11-15T00:00:00Z", false],
+    ["2026-11-07T00:00:00Z", "2026-11-15T00:00:00Z", true],
+    ["2026-11-09T00:00:00Z", "2026-11-15T00:00:00Z", true],
+    ["2026-11-09T00:00:01Z", "2026-11-15T00:00:00Z", false],
+  ] as const) assert.equal(matches({ periodStart: start, periodEnd: end }), qualifies);
   assert.equal(matches({}), true);
 });

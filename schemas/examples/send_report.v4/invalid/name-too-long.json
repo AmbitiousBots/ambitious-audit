@@ -6,7 +6,7 @@
     "to": "2026-11-15T00:00:00Z"
   },
   "accountKind": "owner",
-  "summary": "Task, routine and usage tools were unavailable.",
+  "summary": "No rule matched what the bot could observe. Not observed: conversation text, bot, routine and plan usage, other bots, the audit log, task counts, page counts, when each bot was last active, routine counts and run times.",
   "counts": {
     "bots": 0,
     "connectors": {
@@ -34,54 +34,119 @@
       "updated7d": null
     }
   },
-  "findings": [],
+  "findings": [
+    {
+      "evidenceIds": [],
+      "kind": "visibility",
+      "priority": "low",
+      "ruleId": "visibility-transcripts",
+      "severity": "low",
+      "summary": "Not observed: conversation text. Findings cover only what the bot could see."
+    },
+    {
+      "evidenceIds": [],
+      "kind": "visibility",
+      "priority": "low",
+      "ruleId": "visibility-usage",
+      "severity": "low",
+      "summary": "Not observed: bot, routine and plan usage. Findings cover only what the bot could see."
+    },
+    {
+      "evidenceIds": [],
+      "kind": "visibility",
+      "priority": "low",
+      "ruleId": "visibility-other-bots",
+      "severity": "low",
+      "summary": "Not observed: other bots. Findings cover only what the bot could see."
+    },
+    {
+      "evidenceIds": [],
+      "kind": "visibility",
+      "priority": "low",
+      "ruleId": "visibility-audit-log",
+      "severity": "low",
+      "summary": "Not observed: the audit log. Findings cover only what the bot could see."
+    },
+    {
+      "evidenceIds": [],
+      "kind": "visibility",
+      "priority": "low",
+      "ruleId": "visibility-tasks",
+      "severity": "low",
+      "summary": "Not observed: task counts. Findings cover only what the bot could see."
+    },
+    {
+      "evidenceIds": [],
+      "kind": "visibility",
+      "priority": "low",
+      "ruleId": "visibility-pages",
+      "severity": "low",
+      "summary": "Not observed: page counts. Findings cover only what the bot could see."
+    },
+    {
+      "evidenceIds": [],
+      "kind": "visibility",
+      "priority": "low",
+      "ruleId": "visibility-bot-activity",
+      "severity": "low",
+      "summary": "Not observed: when each bot was last active. Findings cover only what the bot could see."
+    },
+    {
+      "evidenceIds": [],
+      "kind": "visibility",
+      "priority": "low",
+      "ruleId": "visibility-routines",
+      "severity": "low",
+      "summary": "Not observed: routine counts and run times. Findings cover only what the bot could see."
+    }
+  ],
   "recommendations": [],
   "evidence": [],
   "visibility": [
     {
+      "seen": false,
       "signal": "transcripts",
-      "seen": false,
-      "why": "The tool was unavailable."
+      "why": "The collector marked this signal as unobserved."
     },
     {
+      "seen": false,
       "signal": "usage",
-      "seen": false,
-      "why": "The tool was unavailable."
+      "why": "Missing exact shares, routine usage, weekly limit, credit balance, plan time, plan period."
     },
     {
+      "seen": false,
       "signal": "otherBots",
-      "seen": false,
-      "why": "The tool was unavailable."
+      "why": "The collector marked this signal as unobserved."
     },
     {
+      "seen": false,
       "signal": "auditLog",
-      "seen": false,
-      "why": "The tool was unavailable."
+      "why": "The collector marked this signal as unobserved."
     },
     {
-      "signal": "accountRole",
       "seen": true,
-      "why": "The account settings show the role."
+      "signal": "accountRole",
+      "why": "Observed account role."
     },
     {
+      "seen": false,
       "signal": "tasks",
-      "seen": false,
-      "why": "The tool was unavailable."
+      "why": "Missing open tasks, stale tasks, blocked tasks, seven-day closures."
     },
     {
+      "seen": false,
       "signal": "pages",
-      "seen": false,
-      "why": "The tool was unavailable."
+      "why": "Missing page count, seven-day page updates."
     },
     {
+      "seen": false,
       "signal": "botActivity",
-      "seen": false,
-      "why": "The tool was unavailable."
+      "why": "Missing last activity."
     },
     {
-      "signal": "routines",
       "seen": false,
-      "why": "The tool was unavailable."
+      "signal": "routines",
+      "why": "Missing routine inventory, last runs, weekly runs, weekly failures."
     }
   ],
   "moduleVersions": {

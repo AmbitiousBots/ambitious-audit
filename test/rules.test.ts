@@ -55,10 +55,10 @@ const snapshotFor = (fixture: Fixture): CollectorInput => {
   const routines = fixture.routines ?? [];
   const connectors = fixture.connectors ?? [];
   const evidence = [
-    ...routines.map((routine, index) => ({ id: `ev-${index + 1}`, kind: "excerpt" as const, text: `Routine ${routine.id}.`, source: routine.id })),
-    ...connectors.map((connector, index) => ({ id: `ev-${routines.length + index + 1}`, kind: "excerpt" as const, text: `Connector ${connector.name}.`, source: connector.name })),
-    ...bots.map((bot, index) => ({ id: `ev-${routines.length + connectors.length + index + 1}`, kind: "count" as const, text: `Bot ${bot.id}.`, source: bot.id })),
-    { id: "ev-90", kind: "count" as const, text: "Open tasks have not changed.", source: "tasks" },
+    ...routines.map((routine, index) => ({ id: `ev-${index + 1}`, kind: "excerpt" as const, text: `Routine ${routine.id}.`, sourceKind: "routine", source: routine.id })),
+    ...connectors.map((connector, index) => ({ id: `ev-${routines.length + index + 1}`, kind: "excerpt" as const, text: `Connector ${connector.name}.`, sourceKind: "connector", source: connector.name })),
+    ...bots.map((bot, index) => ({ id: `ev-${routines.length + connectors.length + index + 1}`, kind: "count" as const, text: `Bot ${bot.id}.`, sourceKind: "bot", source: bot.id })),
+    { id: "ev-90", kind: "count" as const, text: "Open tasks have not changed.", sourceKind: "tasks", source: "tasks" },
   ].filter((item) => isEvidenceId(item.id));
   return parseCollector({
     schemaVersion: 2,
@@ -135,8 +135,8 @@ test("evidence for bot-10 is not cited for bot-1, and the same holds for routine
     pages: { count: 0, updated7d: 0 },
     visibility,
     evidence: [
-      { id: "ev-1", kind: "excerpt", text: "Active yesterday.", source: "bot-10" },
-      { id: "ev-2", kind: "excerpt", text: "Ran yesterday.", source: "routine-10" },
+      { id: "ev-1", kind: "excerpt", text: "Active yesterday.", sourceKind: "bot", source: "bot-10" },
+      { id: "ev-2", kind: "excerpt", text: "Ran yesterday.", sourceKind: "routine", source: "routine-10" },
     ],
   });
   const hits = evaluateRules(snapshot, [parseRule(botUnused), parseRule(failingRoutine)]);
@@ -162,7 +162,7 @@ test("stale-task evidence matches the source tasks and not the word task", () =>
     evidence: [
       { id: "ev-1", kind: "excerpt", text: "This task is unrelated.", source: "task list tool" },
       { id: "ev-2", kind: "excerpt", text: "task", source: "task" },
-      { id: "ev-3", kind: "count", text: "Open tasks have not changed.", source: "Tasks" },
+      { id: "ev-3", kind: "count", text: "Open tasks have not changed.", sourceKind: "tasks", source: "Tasks" },
     ],
   });
   const hits = evaluateRules(withExtra, [parseRule(staleTasks)]);
@@ -179,9 +179,9 @@ test("cited recommendation evidence stays in the report when the evidence list i
     id: `ev-${index + 1}`,
     kind: "count" as const,
     text: `Row ${index + 1}.`,
-    source: "notes",
+    sourceKind: "bot", source: "bot-1",
   }));
-  const snapshot = snapshotFor({ name: "many", expect: "hit" });
+  const snapshot = snapshotFor({ name: "many", expect: "hit", bots: [{ id: "bot-1", name: "Queue", lastActiveAt: "never", usage: null, routineCount: 0 }] });
   const full = parseCollector({ ...snapshot, evidence });
   const ids = (from: number, count: number): EvidenceId[] =>
     Array.from({ length: count }, (_, index) => branded(`ev-${from + index}`, isEvidenceId, "evidence id"));
@@ -207,7 +207,7 @@ test("cited recommendation evidence stays in the report when the evidence list i
   for (const recommendation of payload.recommendations) {
     for (const id of recommendation.evidenceIds) assert.equal(kept.has(id), true, id);
   }
-  assert.equal(payload.evidence[0]?.id, "ev-31");
+  assert.deepEqual([...kept], Array.from({ length: 30 }, (_, i) => `ev-${i + 1}`));
 });
 
 test("when the role is unknown, at most three recommendations are returned and the ones that depend on the role are left out", () => {

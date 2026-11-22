@@ -1,8 +1,9 @@
 import { isRecord } from "@ambitious/kit/domain/json";
+import { evidenceSubjects, type SourceKind } from "./evidence.ts";
 import { addDays, observedInstant, olderThanDays, parseTimestamp, withinDays } from "./time.ts";
 import type { CollectorInput, Effort, EvidenceId, EvidenceIds, Fingerprint, RuleId, Severity } from "./types.ts";
 import type { CollectorV2Bot, CollectorV2BotUsage, CollectorV2Routine } from "./wire.generated.ts";
-import { isEvidenceId, isFingerprint, isRecommendationId, isRuleId } from "./types.ts";
+import { isFingerprint, isRecommendationId, isRuleId } from "./types.ts";
 
 type CountText = { readonly one: string; readonly many: string };
 
@@ -105,15 +106,9 @@ const referenceMs = (snapshot: CollectorInput): number => {
   return parsed;
 };
 
-const evidenceFor = (snapshot: CollectorInput, keys: readonly string[], exact: boolean): EvidenceId[] => {
-  const sourceKey = (key: string) => exact ? key : key.toLowerCase();
-  const wanted = new Set(keys.map(sourceKey));
-  const ids: EvidenceId[] = [];
-  for (const item of snapshot.evidence) {
-    if (!wanted.has(sourceKey(item.source))) continue;
-    if (isEvidenceId(item.id) && !ids.includes(item.id)) ids.push(item.id);
-  }
-  return ids.slice(0, 10);
+const evidenceFor = (evidence: ReturnType<typeof evidenceSubjects>, kind: SourceKind, subjects: readonly string[]): EvidenceId[] => {
+  const wanted = new Set(subjects);
+  return [...evidence].filter(([, subject]) => subject.kind === kind && wanted.has(subject.key)).slice(0, 10).map(([id]) => id);
 };
 
 const sentence = (summary: CountText, count: number): string => (count === 1 ? summary.one : summary.many.replaceAll("{count}", String(count)));
@@ -124,13 +119,13 @@ const fingerprintFor = (id: RuleId, subjects: readonly string[]): Fingerprint =>
   return text;
 };
 
-const hit = (rule: RuleDefinition, snapshot: CollectorInput, subjects: readonly string[], evidenceKeys: readonly string[]): RuleHit | null => {
+const hit = (rule: RuleDefinition, snapshot: CollectorInput, subjects: readonly string[], evidenceIds: EvidenceIds): RuleHit | null => {
   if (subjects.length === 0) return null;
   return {
     rule,
     subjects,
     withheld: rule.dependsOnRole && snapshot.account.kind === "unknown",
-    evidenceIds: evidenceFor(snapshot, evidenceKeys, rule.when.kind === "bot-unused" || rule.when.kind === "bots-barely-used"),
+    evidenceIds,
     summary: sentence(rule.summary, subjects.length),
     fingerprint: fingerprintFor(rule.id, subjects),
   };
@@ -177,43 +172,43 @@ const belowOnePercentLastWeek = ({ usage }: CollectorV2Bot, collected: number): 
   if (usage?.unit === "percent") return usage.amount7d < 1;
   if (usage?.unit !== "share" || usage.period !== "last_7_days") return false;
   const interval = shareInterval(usage, collected);
-  if (interval === null) return false;
+  if (interval === null || interval.end < addDays(interval.start, 6) || interval.end > addDays(interval.start, 8)) return false;
   const overlapStart = Math.max(interval.start, addDays(collected, -7));
   const overlapEnd = Math.min(interval.end, collected);
   if (addDays(overlapStart, 6) > overlapEnd) return false;
   return "share" in usage ? usage.share < 0.01 : usage.shareBelow <= 0.01;
 };
 
-const subjectsOf = (rule: RuleDefinition, snapshot: CollectorInput): { readonly subjects: readonly string[]; readonly evidenceKeys: readonly string[] } | null => {
+const subjectsOf = (rule: RuleDefinition, snapshot: CollectorInput): { readonly subjects: readonly string[]; readonly kind: SourceKind } | null => {
   const when = rule.when;
   const collected = referenceMs(snapshot);
   if (when.kind === "routine-state") {
     const subjects = snapshot.routines.filter((routine) => routine.state === when.state).map((routine) => routine.id);
-    return { subjects, evidenceKeys: subjects };
+    return { subjects, kind: "routine" };
   }
   if (when.kind === "routine-paused-for") {
     const subjects = snapshot.routines.filter((routine) => pausedLongerThan(routine, collected, when.olderThanDays)).map((routine) => routine.id);
-    return { subjects, evidenceKeys: subjects };
+    return { subjects, kind: "routine" };
   }
   if (when.kind === "routine-paused-since-unknown") {
     const subjects = snapshot.routines.filter((routine) => pausedSinceUnknown(routine, collected, when.unlessCreatedOrRunWithinDays)).map((routine) => routine.id);
-    return { subjects, evidenceKeys: subjects };
+    return { subjects, kind: "routine" };
   }
   if (when.kind === "connector-status") {
     const subjects = snapshot.connectors.filter((connector) => connector.status === when.status).map((connector) => connector.name);
-    return { subjects, evidenceKeys: subjects };
+    return { subjects, kind: "connector" };
   }
   if (when.kind === "bot-unused") {
     const subjects = snapshot.bots.filter((bot) => botUnused(bot, collected, when.olderThanDays)).map((bot) => bot.id);
-    return { subjects, evidenceKeys: subjects };
+    return { subjects, kind: "bot" };
   }
   if (when.kind === "bots-barely-used") {
     const subjects = snapshot.bots.filter((bot) => belowOnePercentLastWeek(bot, collected)).map((bot) => bot.id);
-    return subjects.length >= when.minimumBots ? { subjects, evidenceKeys: subjects } : null;
+    return subjects.length >= when.minimumBots ? { subjects, kind: "bot" } : null;
   }
   if (when.kind === "stale-tasks") {
     const stale = snapshot.tasks.stale7d;
-    return stale !== null && stale > when.moreThan ? { subjects: ["tasks"], evidenceKeys: ["tasks"] } : { subjects: [], evidenceKeys: [] };
+    return stale !== null && stale > when.moreThan ? { subjects: ["tasks"], kind: "tasks" } : null;
   }
   const groups = new Map<string, string[]>();
   for (const routine of snapshot.routines) {
@@ -223,15 +218,16 @@ const subjectsOf = (rule: RuleDefinition, snapshot: CollectorInput): { readonly 
     groups.set(key, list);
   }
   const subjects = [...groups.values()].filter((ids) => ids.length > 1).flat();
-  return { subjects, evidenceKeys: subjects };
+  return { subjects, kind: "routine" };
 };
 
 export const evaluateRules = (snapshot: CollectorInput, rules: readonly RuleDefinition[]): readonly RuleHit[] => {
+  const evidence = evidenceSubjects(snapshot);
   const hits: RuleHit[] = [];
   for (const rule of rules) {
     const matched = subjectsOf(rule, snapshot);
     if (matched === null) continue;
-    const next = hit(rule, snapshot, matched.subjects, matched.evidenceKeys);
+    const next = hit(rule, snapshot, matched.subjects, evidenceFor(evidence, matched.kind, matched.subjects));
     if (next !== null) hits.push(next);
   }
   return hits;

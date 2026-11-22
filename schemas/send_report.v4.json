@@ -410,7 +410,7 @@
       "type": "string",
       "maxLength": 9,
       "pattern": "^ev-[1-9][0-9]{0,5}$",
-      "description": "The id of one piece of evidence, such as ev-1."
+      "description": "A report-local ID assigned by the module, such as ev-1."
     },
     "evidenceIds": {
       "type": "array",
@@ -553,13 +553,13 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 200,
-          "description": "The allowed observation or a description of the recorded evidence kind."
+          "description": "Observation generated from the structured reading."
         },
         "source": {
           "type": "string",
           "minLength": 1,
           "maxLength": 200,
-          "description": "The allowed evidence source or a module-generated label."
+          "description": "Module-generated label for the source of the reading."
         }
       }
     },
@@ -599,7 +599,7 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 280,
-          "description": "Plain words: how it was seen, or why it could not be."
+          "description": "Module-generated description of the readings, coverage and access scope."
         }
       }
     },
@@ -778,7 +778,7 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 60,
-          "description": "The normalized account display name or a numbered label when withheld."
+          "description": "The producer emits a normalized display name of up to 40 characters or a numbered label when withheld."
         },
         "usageShare": {
           "type": [
@@ -908,7 +908,7 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 60,
-          "description": "The normalized account display name or a numbered label when withheld."
+          "description": "The producer emits a normalized display name of up to 40 characters or a numbered label when withheld."
         },
         "status": {
           "enum": [

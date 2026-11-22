@@ -29,12 +29,12 @@ const base: unknown = JSON.parse(
     planUsage: { weeklyLimitUsedPercent: 0, extraCreditsLeftUsdCents: 0, observedAt: "2026-11-15T00:00:00Z", period: "this_week" },
     visibility: ["transcripts", "usage", "otherBots", "auditLog", "accountRole", "tasks", "pages", "botActivity", "routines"].map((signal) => ({ signal, seen: true, why: "Read with the bot's own tools." })),
     evidence: [
-      { id: "ev-1", kind: "excerpt", text: "Never active.", source: "bot-1" },
-      { id: "ev-2", kind: "excerpt", text: "Paused since the start of the month.", source: "routine-1" },
-      { id: "ev-3", kind: "excerpt", text: "Failing.", source: "routine-2" },
-      { id: "ev-4", kind: "excerpt", text: "Needs a sign-in.", source: "calendar" },
-      { id: "ev-5", kind: "excerpt", text: "Not shared with this bot.", source: "documents" },
-      { id: "ev-6", kind: "count", text: "2 stale tasks.", source: "tasks" },
+      { id: "ev-1", kind: "excerpt", text: "Never active.", sourceKind: "bot", source: "bot-1" },
+      { id: "ev-2", kind: "excerpt", text: "Paused since the start of the month.", sourceKind: "routine", source: "routine-1" },
+      { id: "ev-3", kind: "excerpt", text: "Failing.", sourceKind: "routine", source: "routine-2" },
+      { id: "ev-4", kind: "excerpt", text: "Needs a sign-in.", sourceKind: "connector", source: "calendar" },
+      { id: "ev-5", kind: "excerpt", text: "Not shared with this bot.", sourceKind: "connector", source: "documents" },
+      { id: "ev-6", kind: "count", text: "2 stale tasks.", sourceKind: "tasks", source: "tasks" },
     ],
   }),
 );
@@ -113,8 +113,8 @@ test("the rules given when the role is unknown are the two connector rules and s
   const document = documentWith(roleGroup, roleGroup);
   document.evidence = [
     ...(Array.isArray(document.evidence) ? document.evidence : []),
-    { id: "ev-7", kind: "excerpt", text: "A second line about the calendar connector.", source: "Calendar" },
-    { id: "ev-8", kind: "excerpt", text: "A line that only mentions the calendar connector.", source: "calendar tool" },
+    { id: "ev-7", kind: "excerpt", text: "A second line about the calendar connector.", sourceKind: "connector", source: "Calendar" },
+    { id: "ev-8", kind: "excerpt", text: "A line that only mentions the calendar connector.", sourceKind: "connector", source: "calendar tool" },
   ];
   const snapshot = parseCollector(document);
   const connectorNames = new Set(snapshot.connectors.map((connector) => connector.name.toLowerCase()));

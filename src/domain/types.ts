@@ -73,7 +73,7 @@ export const err = <E>(error: E): Result<never, E> => ({ ok: false, error });
 export type CollectorInput = Omit<CollectorV2, "schemaVersion"> & { readonly schemaVersion: 1 | 2 };
 
 export type VisibilitySignal = CollectorV2VisibilityEntry["signal"];
-export type VisibilityEntry = CollectorV2VisibilityEntry;
+export type VisibilityEntry = SendReportV4["visibility"][number];
 export type VisibilityMap = readonly VisibilityEntry[];
 
 export const VISIBILITY_SIGNALS = ["transcripts", "usage", "otherBots", "auditLog", "accountRole", "tasks", "pages", "botActivity", "routines"] as const satisfies readonly VisibilitySignal[];

@@ -132,8 +132,8 @@
   "evidence": [
     {
       "id": "ev-1",
-      "source": "Collector",
-      "text": "The measured share was below one percent."
+      "source": "Bot 3",
+      "text": "The bot accounted for less than 1% of usage over the last 7 days."
     }
   ],
   "findings": [
@@ -221,54 +221,54 @@
       "why": "Check whether the measured usage is expected for each bot's work."
     }
   ],
-  "reportId": "01a1dc80-f000-7509-8b29-e6ec10cf689a",
+  "reportId": "01a1dc80-f000-7b42-8914-a580e4038079",
   "schemaVersion": 4,
   "summary": "1 connector is connected, but this bot has no access to it. 6 bots each accounted for under 1% of usage during their respective measured periods. Not observed: conversation text, the audit log, page counts. Partially observed: bot, routine and plan usage, when each bot was last active.",
   "visibility": [
     {
       "seen": false,
       "signal": "transcripts",
-      "why": "The tool was unavailable."
+      "why": "The collector marked this signal as unobserved."
     },
     {
       "seen": "partial",
       "signal": "usage",
-      "why": "The usage report gives exact and bounded shares, omits one bot and omits routine usage."
+      "why": "Observed bounds, weekly limit, credit balance, plan time, plan period. Partially observed exact shares. Missing routine usage. Access limited to shared folders."
     },
     {
       "seen": true,
       "signal": "otherBots",
-      "why": "The account lists all bots."
+      "why": "Observed listed bots, full bot inventory."
     },
     {
       "seen": false,
       "signal": "auditLog",
-      "why": "The tool was unavailable."
+      "why": "The collector marked this signal as unobserved."
     },
     {
       "seen": true,
       "signal": "accountRole",
-      "why": "The account settings show the role."
+      "why": "Observed account role."
     },
     {
       "seen": true,
       "signal": "tasks",
-      "why": "The task list includes seven-day closures."
+      "why": "Observed open tasks, stale tasks, blocked tasks, seven-day closures."
     },
     {
       "seen": false,
       "signal": "pages",
-      "why": "The tool was unavailable."
+      "why": "Missing page count, seven-day page updates."
     },
     {
       "seen": "partial",
       "signal": "botActivity",
-      "why": "Only one bot has a reported activity time."
+      "why": "Partially observed last activity."
     },
     {
       "seen": true,
       "signal": "routines",
-      "why": "The routine list includes states and run history."
+      "why": "Observed routine inventory, routine counts, last runs, weekly runs, weekly failures."
     }
   ]
 }

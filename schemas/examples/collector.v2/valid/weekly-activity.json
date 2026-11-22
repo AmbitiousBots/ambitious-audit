@@ -153,56 +153,48 @@
   "visibility": [
     {
       "signal": "transcripts",
-      "seen": false,
-      "why": "The tool was unavailable."
+      "seen": false
     },
     {
       "signal": "usage",
       "seen": "partial",
-      "why": "The usage report gives exact and bounded shares, omits one bot and omits routine usage."
+      "scope": "shared_only"
     },
     {
       "signal": "otherBots",
-      "seen": true,
-      "why": "The account lists all bots."
+      "seen": true
     },
     {
       "signal": "auditLog",
-      "seen": false,
-      "why": "The tool was unavailable."
+      "seen": false
     },
     {
       "signal": "accountRole",
-      "seen": true,
-      "why": "The account settings show the role."
+      "seen": true
     },
     {
       "signal": "tasks",
-      "seen": true,
-      "why": "The task list includes seven-day closures."
+      "seen": true
     },
     {
       "signal": "pages",
-      "seen": false,
-      "why": "The tool was unavailable."
+      "seen": false
     },
     {
       "signal": "botActivity",
-      "seen": "partial",
-      "why": "Only one bot has a reported activity time."
+      "seen": "partial"
     },
     {
       "signal": "routines",
-      "seen": true,
-      "why": "The routine list includes states and run history."
+      "seen": true
     }
   ],
   "evidence": [
     {
-      "id": "ev-1",
+      "id": "ev-41",
       "kind": "count",
-      "text": "The measured share was below one percent.",
-      "source": "bot-3"
+      "source": "bot-3",
+      "sourceKind": "bot"
     }
   ],
   "planUsage": {

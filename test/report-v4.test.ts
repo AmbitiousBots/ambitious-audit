@@ -101,18 +101,15 @@ test("task and page readings determine coverage and visibility findings, includi
     assert.deepEqual(partial.counts.tasks, tasks);
     assert.deepEqual(partial.counts.pages, pages);
     const readings = { ...unobserved, tasks: { open: 0, stale7d: 0, blocked: 0, closed7d: count }, pages: { count, updated7d: 0 } };
-    const why = "The tool could read only the shared folder.";
     for (const seen of [false, "partial", true]) {
       const payload = report({ ...readings, visibility: readings.visibility.map((entry) =>
-        ["tasks", "pages"].includes(entry.signal) ? { ...entry, seen, why } : entry) });
+        ["tasks", "pages"].includes(entry.signal) ? { ...entry, seen, scope: "shared_only", why: "No counts were returned." } : entry) });
       for (const signal of ["tasks", "pages"]) {
         const visibility = payload.visibility.find((entry) => entry.signal === signal);
-        assert.equal(visibility?.seen, seen === true ? true : "partial");
-        if (seen === false) {
-          assert.match(visibility?.why ?? "", /Observed .*tasks|Observed page count/u);
-          assert.match(visibility?.why ?? "", /limited to shared folders/u);
-        } else assert.equal(visibility?.why, why);
-        assert.equal(payload.findings.some((item) => item.ruleId === `visibility-${signal}`), seen !== true);
+        assert.equal(visibility?.seen, "partial");
+        assert.match(visibility?.why ?? "", /Observed .*tasks|Observed page count/u);
+        assert.match(visibility?.why ?? "", /limited to shared folders/u);
+        assert.ok(payload.findings.some((item) => item.ruleId === `visibility-${signal}`));
       }
     }
     const unseen = report({ ...unobserved, visibility: unobserved.visibility.map((entry) =>
@@ -187,7 +184,7 @@ test("plan credits convert whole cents to dollars and preserve missing values", 
 });
 
 test("explicit null plan, task and run values require a matching visibility gap", () => {
-  const fullySeen = weekly.visibility.map((entry) => entry.signal === "usage" ? { ...entry, seen: true } : entry);
+  const fullySeen = weekly.visibility.map((entry) => entry.signal === "usage" ? { ...entry, seen: true, scope: "all" } : entry);
   assert.throws(() => parseCollector({ ...weekly, bots: [], routines: [], visibility: fullySeen, planUsage: { ...weekly.planUsage, period: null } }), /null-needs-visibility-gap/);
   assert.throws(() => parseCollector({ ...weekly, tasks: { ...weekly.tasks, closed7d: null } }), /null-needs-visibility-gap/);
   assert.throws(() => parseCollector({ ...weekly, routines: weekly.routines.map((routine) => ({ ...routine, runs7d: null })) }), /null-needs-visibility-gap/);
@@ -200,8 +197,10 @@ test("exact and bounded shares exclude each other in the wire type", () => {
   assert.throws(() => parseCollector({ ...weekly, bots: weekly.bots.map((bot) => ({ ...bot, usage: invalid })) }));
 });
 
-test("the report filters private text and keeps ordinary names across all five free-text fields", () => {
+test("only gated display names reach the assembled report from collector text", () => {
   const withheld = [
+    "glpat-abcdefghijklmnopqrst", "glpat-abcdefgh", "casey(at)example.invalid", "PIN 1234", "casey[dot]test", "Access Code",
+    "Maker's Co-op (North), Ltd.", "Team 12 and 34",
     "desk@example.invalid", "https://sample:fixture@example.invalid/path", "https://example.invalid/items?q=sample",
     "sk-test-syntheticcredential", "a7B9c1D3e5F7g9H1i3J5k7L9", "client_secret=sample-value",
     '{"refresh_token":"sample-value"}', "path?option=one&userPassword=sample", "prefix-PASSWD-end: sample",
@@ -220,50 +219,58 @@ test("the report filters private text and keeps ordinary names across all five f
   const keep = [
     "Authentic Catering", "Author Services", "Cookie Bakery", "Basic Bookkeeping", "Basic Operations", "Digest Printing",
     "Dental Care", "Tool & Die", "Market 24", "Food Pantry", "Software Support", "Neighborhood Salon", "Café Services",
-    "Maker's Co-op (North), Ltd.", "Team 12 and 34",
+    "O’Brien Plumbing", "हिन्दी सेवा", "Maker's Co-op",
   ];
   const build = (value: string) => report({
     ...weekly, bots: weekly.bots.map((bot) => ({ ...bot, name: value })),
     connectors: [{ name: value, status: "needsAuth" }],
-    evidence: [{ id: "ev-1", kind: "excerpt", text: `Reading from ${value}`, source: value }],
+    evidence: [{ id: "ev-482913", sourceKind: "connector", kind: "excerpt", text: `Reading from ${value}`, source: value }],
     visibility: weekly.visibility.map((entry) => ({ ...entry, why: `Observed via ${value}` })),
   });
-  for (const value of withheld) {
-    const payload = build(value);
-    assert.deepEqual(payload.bots.map(({ name, nameWithheld }) => [name, nameWithheld]),
-      weekly.bots.map((_, i) => [`Bot ${i + 1}`, true]), value);
-    assert.deepEqual(payload.connectors, [{ name: "Connector 1", nameWithheld: true, status: "needsAuth" }], value);
-    assert.deepEqual(payload.evidence, [{ id: "ev-1", source: "Collector", text: "The collector recorded an excerpt." }], value);
-    assert.ok(payload.visibility.every(({ why }) => !why.includes("Observed via") && !why.includes(value)), value);
-    assert.deepEqual(payload.recommendations[0]?.evidenceIds, ["ev-1"], value);
-  }
-  for (const value of keep) {
-    const payload = build(value);
-    assert.ok(payload.bots.every((row) => row.name === value && row.nameWithheld === undefined), value);
-    assert.deepEqual(payload.connectors, [{ name: value, status: "needsAuth" }], value);
-    assert.deepEqual(payload.evidence, [{ id: "ev-1", source: value, text: `Reading from ${value}` }], value);
-    assert.ok(payload.visibility.every(({ why }) => why === `Observed via ${value}`), value);
+  const { bots: _bots, connectors: _connectors, ...baseline } = build("Sample");
+  for (const value of [...withheld, ...keep]) {
+    const { bots, connectors, ...rest } = build(value);
+    const reject = withheld.includes(value);
+    for (const [i, bot] of bots.entries()) {
+      assert.equal(bot.name, reject ? `Bot ${i + 1}` : value.replaceAll("’", "'"), value);
+      assert.equal(bot.nameWithheld, reject ? true : undefined, value);
+    }
+    assert.deepEqual(connectors, [reject ? { name: "Connector 1", nameWithheld: true, status: "needsAuth" }
+      : { name: value.replaceAll("’", "'"), status: "needsAuth" }], value);
+    assert.deepEqual(rest, baseline, value);
+    assert.deepEqual(rest.evidence, [{ id: "ev-1", source: "Connector 1", text: "The connector reported status needsAuth." }]);
+    assert.deepEqual(rest.recommendations[0]?.evidenceIds, ["ev-1"]);
+    assert.doesNotMatch(JSON.stringify(rest), /Reading from|Observed via|482913/u);
   }
 });
 
-test("name and observation gates use independent limits after Unicode normalization", () => {
-  for (const [value, nameAllowed, observationAllowed] of [
-    ["𠀀".repeat(60), true, true], ["𠀀".repeat(61), false, true], ["Desk 1234", false, true], ["Desk 12345", false, false],
-    ["Area a2", true, false], ["Group 12 and 34 and 5", false, true], ["Ｑｕｅｕｅ ７", true, true],
+test("a v1 snapshot retains local prose and IDs while its new report uses task readings and report IDs", () => {
+  const note = "Local observation";
+  const { usageOther: _aggregate, ...base } = legacy;
+  const input = { ...base, account: { ...legacy.account, label: note },
+    bots: ["tasks", "b", "c"].map((id) => ({ id, name: "Queue", lastActiveAt: null, routineCount: 0, usage: { unit: "percent", amount7d: 0.5 } })),
+    routines: [], tasks: { open: 12, stale7d: 12, blocked: 0 },
+    visibility: legacy.visibility.map((entry) => ({ ...entry, why: note })),
+    evidence: [{ id: "ev-482913", kind: "count", source: "tasks", text: note }] };
+  const snapshot = parseCollector(input);
+  assert.deepEqual(snapshot.evidence, input.evidence);
+  assert.ok(snapshot.visibility.every((entry) => entry.why === note));
+  const payload = report(snapshot);
+  assert.doesNotMatch(JSON.stringify(payload), /Local observation|482913/u);
+  assert.deepEqual(payload.recommendations.map((item) => [item.id, item.evidenceIds]), [["stale-tasks", ["ev-1"]]]);
+  assert.deepEqual(payload.evidence, [{ id: "ev-1", source: "Task counts", text: "Open tasks stale for seven days: 12." }]);
+});
+
+test("name limits count normalized code points, letters, words and ASCII digits", () => {
+  const atLimit = ["𠀀".repeat(16), "𠀀".repeat(16), "𠀀".repeat(6)].join(" ");
+  for (const [value, allowed] of [
+    [atLimit, true], [atLimit + "𠀀", false], ["𠀀".repeat(17), false], ["One two three four five", true],
+    ["One two three four five six", false], ["Area a2", true], ["Studio 12", true], ["Desk 1 and 23", false],
+    ["Ｑｕｅｕｅ ７", true], ["Desḱ", true], ["Desk ́", false], ["Key Desk", false], ["AccessPin", false],
   ] as const) {
-    const normalized = value.normalize("NFKC");
-    const payload = report({ ...weekly, connectors: [{ name: value, status: "needsGrant" }],
-      evidence: [{ id: "ev-1", kind: "count", source: value, text: "Three items." }] });
-    assert.deepEqual(payload.connectors[0], nameAllowed ? { name: normalized, status: "needsGrant" }
-      : { name: "Connector 1", nameWithheld: true, status: "needsGrant" });
-    assert.deepEqual(payload.evidence[0], { id: "ev-1", source: observationAllowed ? normalized : "Collector", text: "Three items." });
-  }
-  for (const length of [200, 201]) {
-    const value = "𠀀".repeat(length);
-    const payload = report({ ...weekly, evidence: [{ id: "ev-1", kind: "count", source: "Documents", text: value }],
-      visibility: weekly.visibility.map((entry) => ({ ...entry, why: value })) });
-    assert.deepEqual(payload.evidence[0], { id: "ev-1", source: "Documents", text: length === 200 ? value : "The collector recorded a count." });
-    assert.equal(payload.visibility.every(({ why }) => why === value), length === 200);
+    const payload = report({ ...weekly, connectors: [{ name: value, status: "ok" }] });
+    assert.deepEqual(payload.connectors[0], allowed ? { name: value.normalize("NFKC"), status: "ok" }
+      : { name: "Connector 1", nameWithheld: true, status: "ok" }, value);
   }
 });
 
@@ -304,7 +311,7 @@ test("activity and routine coverage reflect complete, mixed and absent v2 readin
 test("usage coverage requires plan measurements and reflects missing fields", () => {
   const inventory = {
     ...weekly, routines: [], bots: weekly.bots.map((bot) => ({ ...bot, routineCount: 0, usage: { unit: "percent", amount7d: 0 } })),
-    visibility: weekly.visibility.map((entry) => entry.signal === "usage" ? { ...entry, seen: true } : entry),
+    visibility: weekly.visibility.map((entry) => entry.signal === "usage" ? { ...entry, seen: true, scope: "all" } : entry),
   };
   const seen = (raw: unknown) => report(raw).visibility.find((entry) => entry.signal === "usage")?.seen;
   assert.equal(seen(inventory), true);
@@ -330,7 +337,7 @@ test("all findings and recommendations retain evidence when four rules compete f
   const connectors = [{ name: "Connector 1", status: "needsAuth" }, { name: "Connector 2", status: "needsGrant" }];
   const sources = ["Connector 1", "Connector 2", "routine-1", "bot-1"];
   const evidence = sources.flatMap((source, group) => Array.from({ length: 10 }, (_, index) => ({
-    source, id: `ev-${group * 10 + index + 1}`, kind: "count", text: `Observation ${index + 1}`,
+    source, sourceKind: ["connector", "connector", "routine", "bot"][group], id: `ev-${group * 10 + index + 1}`, kind: "count", text: `Observation ${index + 1}`,
   })));
   const payload = report({ ...weekly, bots, connectors, evidence, routines: weekly.routines.map((row) => ({ ...row, state: "failing" })) });
   const kept = new Set(payload.evidence.map((row) => row.id));
@@ -343,19 +350,38 @@ test("all findings and recommendations retain evidence when four rules compete f
   }
 });
 
-test("a changed coverage explanation names the readings, missing measures and restricted scope", () => {
-  const build = (why: string) => report({
-    ...unobserved, pages: { count: 3, updated7d: null }, tasks: { ...unobserved.tasks, open: 0 },
-    visibility: unobserved.visibility.map((entry) => ({ ...entry, why })),
-  });
-  const payload = build("No page counts were observed.");
-  assert.deepEqual(payload.visibility.find(({ signal }) => signal === "pages"),
-    { signal: "pages", seen: "partial", why: "Observed page count. Missing seven-day page updates." });
-  assert.match(payload.visibility.find(({ signal }) => signal === "tasks")?.why ?? "", /Observed open tasks.*stale tasks, blocked tasks, seven-day closures/u);
-  const scoped = build("No counts were observed. Access was limited to the shared folder.");
-  assert.match(scoped.visibility.find(({ signal }) => signal === "pages")?.why ?? "", /Observed page count.*seven-day page updates.*limited to shared folders/u);
-  assert.deepEqual(build("Only the shared folder with password sample.").visibility.find(({ signal }) => signal === "pages"),
-    payload.visibility.find(({ signal }) => signal === "pages"));
+test("coverage uses readings even when seen stays partial, and retains the explicit access scope", () => {
+  const input = { ...unobserved, pages: { count: 3, updated7d: null },
+    visibility: unobserved.visibility.map((entry) => entry.signal === "pages"
+      ? { ...entry, seen: "partial", why: "No page counts were observed.", scope: "shared_only" } : entry) };
+  const pages = report(input).visibility.find((entry) => entry.signal === "pages");
+  assert.deepEqual(pages, { signal: "pages", seen: "partial", why: "Observed page count. Missing seven-day page updates. Access limited to shared folders." });
+  for (const [scope, phrase] of [["all", "Account-wide access."], ["limited", "Access limited to part of the account."]] as const) {
+    const scoped = report({ ...input, visibility: input.visibility.map((entry) => ({ ...entry, scope })) });
+    assert.ok(scoped.visibility.every(({ why }) => why.endsWith(phrase)));
+    assert.equal(scoped.visibility.find(({ signal }) => signal === "accountRole")?.seen, true);
+  }
+  const mixed = { ...weekly, usageOther: { share: 0.1 }, bots: [...weekly.bots, {
+    id: "credits", name: "Credits", lastActiveAt: null, routineCount: null, usage: { unit: "credits", amount7d: 1 },
+  }], visibility: weekly.visibility.map((entry) => ["usage", "routines"].includes(entry.signal) ? { ...entry, seen: false } : entry) };
+  const usage = report(parseCollector(mixed)).visibility.find((entry) => entry.signal === "usage");
+  assert.match(usage?.why ?? "", /bounds.*bot credits.*weekly limit/u);
+  assert.match(usage?.why ?? "", /Access limited to shared folders/u);
+});
+
+test("a combined other-bot share establishes partial visibility with one listed bot", () => {
+  const payload = report({ ...unobserved, bots: weekly.bots.slice(0, 1), usageOther: { share: 0.4, botCount: 3 } });
+  const other = payload.visibility.find((entry) => entry.signal === "otherBots");
+  assert.equal(other?.seen, "partial");
+  assert.match(other.why, /combined other-bot share/);
+});
+
+test("an all-null plan has the same readings and visibility as an omitted plan", () => {
+  const empty = { weeklyLimitUsedPercent: null, extraCreditsLeftUsdCents: null, observedAt: null, period: null };
+  for (const base of [unobserved, { ...unobserved, weeklyLimitUsed: legacy.weeklyLimitUsed }]) {
+    assert.deepEqual(parseCollector({ ...base, planUsage: empty }), parseCollector(base));
+    assert.deepEqual(report({ ...base, planUsage: empty }), report(base));
+  }
 });
 
 test("weekly plan readings merge only for the same week and observation instant", () => {
@@ -374,7 +400,7 @@ test("the low-usage recommendation requires evidence for an exact qualifying bot
     usage: { unit: "share", period: "last_7_days", share: id === "Queue" ? 0.985 : 0.005 },
   }));
   const build = (source: string) => report({ ...unobserved, bots,
-    evidence: [{ id: "ev-1", kind: "count", source, text: "Weekly usage reading." }] });
+    evidence: [{ id: "ev-1", kind: "count", sourceKind: "bot", source, text: "Weekly usage reading." }] });
   const wrong = build("Queue");
   assert.deepEqual(wrong.findings.find((row) => row.ruleId === "bots-barely-used")?.evidenceIds, []);
   assert.deepEqual(wrong.recommendations, []);
@@ -382,6 +408,20 @@ test("the low-usage recommendation requires evidence for an exact qualifying bot
   assert.equal(right?.id, "bots-barely-used");
   assert.deepEqual(right.evidenceIds, ["ev-1"]);
   assert.equal(right.why, "Check whether the measured usage is expected for each bot's work.");
+});
+
+test("a bot named tasks and task counts can only cite evidence of their own kind", () => {
+  const bots = ["tasks", "b", "c"].map((id) => ({ id, name: "Queue", usage: { unit: "percent", amount7d: 0.5 }, routineCount: 0, lastActiveAt: null }));
+  const base = { ...unobserved, bots, tasks: { ...unobserved.tasks, open: 12, stale7d: 12 } };
+  const row = { id: "ev-482913", kind: "count", source: "tasks", text: "A local note." };
+  for (const sourceKind of ["tasks", "bot", undefined]) {
+    const evidence = [sourceKind ? { ...row, sourceKind } : row];
+    const payload = report({ ...base, evidence });
+    const ids = payload.recommendations.map((item) => item.id);
+    assert.deepEqual(ids, sourceKind === "tasks" ? ["stale-tasks"] : sourceKind === "bot" ? ["bots-barely-used"] : []);
+    assert.deepEqual(payload.evidence.map((item) => item.source), sourceKind === "tasks" ? ["Task counts"] : sourceKind === "bot" ? ["Bot 3"] : []);
+    assert.doesNotMatch(JSON.stringify(payload), /482913|A local note/u);
+  }
 });
 
 const request = (payload: unknown, id: string) => ({ jsonrpc: "2.0", id, method: "tools/call", params: { name: "send_report", arguments: payload } });
@@ -414,9 +454,10 @@ test("tiny shares and percentages have bounded precision without turning positiv
 
 test("a full inventory fits the MCP body in UTF-8 and a second ASCII-escaping encoder", () => {
   const bots = Array.from({ length: 200 }, (_, i) => ({
-    id: `bot-${i}`, name: String.fromCharCode(0x4e00 + i) + "𠀀".repeat(59),
-    usage: { unit: "share", period: "last_7_days", share: i === 199 ? 0.9999801 : 1e-7 },
-    lastActiveAt: null, routineCount: null,
+    id: `bot-${i}`, name: String.fromCharCode(0x4e00 + i) + "𠀀".repeat(15) + " " + "𠀀".repeat(16) + " " + "𠀀".repeat(6),
+    usage: { unit: "share", period: "last_7_days", share: i === 199 ? 0.9999801 : 1e-7,
+      periodStart: "2026-11-08T00:00:00.000Z", periodEnd: "2026-11-15T00:00:00.000Z" },
+    lastActiveAt: "2026-11-14T00:00:00.000Z", routineCount: 12,
   }));
   const connectors = bots.map(({ name }) => ({ name, status: "ok" }));
   const payload = report({ ...unobserved, bots, connectors });
@@ -434,12 +475,14 @@ test("a full inventory fits the MCP body in UTF-8 and a second ASCII-escaping en
     assert.ok(Buffer.byteLength(wire) <= limit);
   }
   const prettyEnvelope = request(payload, "id");
-  const fullyEscaped = JSON.stringify(prettyEnvelope, null, 10).replaceAll("\n", "\r\n").replace(/"(?:[^"\\]|\\.)*"/gu, (literal: string) => {
+  const prettyEscaped = (value: unknown) => JSON.stringify(value, null, 10).replaceAll("\n", "\r\n").replace(/"(?:[^"\\]|\\.)*"/gu, (literal: string) => {
     const units: string = JSON.parse(literal);
     return '"' + units.split("").map((unit) => "\\u" + unit.charCodeAt(0).toString(16).padStart(4, "0")).join("") + '"';
   });
+  const fullyEscaped = prettyEscaped(prettyEnvelope);
   assert.deepEqual(JSON.parse(fullyEscaped), prettyEnvelope);
   assert.ok(Buffer.byteLength(fullyEscaped) + MCP_ENVELOPE_BYTES <= RECEIVER_BYTE_LIMIT);
   const uncapped = { ...payload, bots: bots.map(({ name }) => ({ ...payload.bots[0], name })), connectors };
-  assert.ok(Buffer.byteLength(secondEncoder(uncapped)) + MCP_ENVELOPE_BYTES > RECEIVER_BYTE_LIMIT);
+  const bytes = Buffer.byteLength(prettyEscaped(uncapped)) + MCP_ENVELOPE_BYTES;
+  assert.ok(bytes > RECEIVER_BYTE_LIMIT, String(bytes));
 });
