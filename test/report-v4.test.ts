@@ -234,15 +234,16 @@ test("only gated display names reach the assembled report from collector text", 
     "Repair Desk (123) 456", "Studio 7 / Suite 42", "Device AB12", "Fullwidth ＠ sample",
     "Scope {sample}", "Quoted \"sample\"", "Mixed🔒name", "Tab\tName", "Trailing newline\n",
     "Basic Yjplcmlj", "Yjplcmlj", "Desk-Yjplcmlj", "YTpzYW1wbGU", "YTpzYW1wbGVzIQ",
+    "Bearer abcdefghijklmnop", "Queue bEaReR Inbox", "Digest Printing", "Digest deadbeef", "Basic Operationg", "Queue Basic Operations",
+    "Token Services", "Bearer Services", "Token Studio", "Token Ab3x", "Queue aUtHoRiZaTiOn Desk", "cReDeNtIaL Inbox",
     ...["Basic", "bEaReR", "Digest", "Token"].flatMap((scheme) =>
       ["Og", "YTo", "Yjpw", "YWI6Yw", "YWI6Y2Q"].map((word) => `${scheme} ${word}`)),
     "desk at example dot invalid", "desk AT DOT invalid", "desk at example dot", "desk (at) example (dot) invalid",
     "desk dot mail at example", "Desk B2B", "3D B2B", "3DAB Printing", "12D Printing",
   ];
   const keep = [
-    "Authentic Catering", "Author Services", "Cookie Bakery", "Basic Bookkeeping", "Basic Operations", "Digest Printing",
-    "Basic Plan", "Token Services", "Bearer Services", "Token Studio", "Basic QUJD", "Digest deadbeef",
-    "Token Ab3x", "basic abcdefghijklmnop", "Basic A", "Basic YjpwA", "Basic OiAB", "Yjpw",
+    "Authentic Catering", "Author Services", "Cookie Bakery", "Basic Bookkeeping", "Basic Operations",
+    "Basic Plan", "Basic QUJD", "basic abcdefghijklmnop", "Basic A", "Basic YjpwA", "Yjpw",
     "Dental Care", "Tool & Die", "Market 24", "Food Pantry", "Software Support", "Neighborhood Salon", "Café Services",
     "O’Brien Plumbing", "हिन्दी सेवा", "Maker's Co-op",
     "3D Printing", "B2B Services", "Dot Matrix", "Service at Home",
@@ -268,6 +269,24 @@ test("only gated display names reach the assembled report from collector text", 
     assert.deepEqual(rest.evidence, [{ id: "ev-1", source: "Connector 1", text: "The connector reported status needsAuth." }]);
     assert.deepEqual(rest.recommendations[0]?.evidenceIds, ["ev-1"]);
     assert.doesNotMatch(JSON.stringify(rest), /Reading from|Observed via|482913/u);
+  }
+});
+
+test("Basic credentials with a colon byte receive generated bot and connector names", () => {
+  const utf8WithNonzeroPadBits = "YTrDqR";
+  const values = [
+    Buffer.from("a:é").toString("base64url"),
+    utf8WithNonzeroPadBits,
+    Buffer.from([0xf8, 0x3a]).toString("base64url"),
+    Buffer.from([0x3a, 0x20, 0x01]).toString("base64"),
+  ];
+  for (const value of values) {
+    const name = `Queue bAsIc ${value}`;
+    const payload = report({ ...weekly, bots: [{ ...weekly.bots[0], name }], connectors: [{ name, status: "ok" }] });
+    assert.equal(payload.bots[0]?.name, "Bot 1", value);
+    assert.equal(payload.bots[0]?.nameWithheld, true, value);
+    assert.deepEqual(payload.connectors, [{ name: "Connector 1", nameWithheld: true, status: "ok" }], value);
+    assert.ok(!JSON.stringify(payload).includes(value), value);
   }
 });
 
