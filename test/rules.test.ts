@@ -123,11 +123,11 @@ test("evidence for bot-10 is not cited for bot-1, and the same holds for routine
     collectedAt: "2026-11-15T00:00:00Z",
     account: { kind: "owner", label: "Main" },
     bots: [
-      { id: "bot-1", name: "Helper", lastActiveAt: "never", routineCount: 0, usage: null },
-      { id: "bot-10", name: "Worker", lastActiveAt: "2026-11-14T00:00:00Z", routineCount: 1, usage: { unit: "credits", amount7d: 1 } },
+      { id: "bot-1", name: "Helper", lastActiveAt: "2026-10-01T08:00:00Z", routineCount: 1, usage: null },
+      { id: "bot-10", name: "Worker", lastActiveAt: "2026-10-01T08:00:00Z", routineCount: 1, usage: null },
     ],
     routines: [
-      { id: "routine-1", botId: "bot-1", schedule: "every day at 08:00", state: "failing", lastRunAt: "2026-11-14T08:00:00Z", usage: null },
+      { id: "routine-1", botId: "bot-1", schedule: "every day at 08:00", state: "failing", lastRunAt: "2026-10-01T08:00:00Z", usage: null },
       { id: "routine-10", botId: "bot-10", schedule: "every day at 09:00", state: "active", lastRunAt: "2026-11-14T09:00:00Z", usage: null },
     ],
     connectors: [],

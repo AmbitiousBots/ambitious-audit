@@ -15,7 +15,10 @@ const base: unknown = JSON.parse(
     schemaVersion: 2,
     collectedAt: "2026-11-15T00:00:00Z",
     account: { kind: "owner", label: "Main" },
-    bots: [{ id: "bot-1", name: "Helper", lastActiveAt: "never", routineCount: 2, usage: { unit: "percent", amount7d: 0 } }],
+    bots: [
+      { id: "bot-1", name: "Queue", lastActiveAt: "2026-11-14T08:00:00Z", routineCount: 2, usage: { unit: "percent", amount7d: 1 } },
+      { id: "bot-2", name: "Desk", lastActiveAt: "never", routineCount: 0, usage: { unit: "percent", amount7d: 0 } },
+    ],
     routines: [
       { id: "routine-1", botId: "bot-1", schedule: "every day at 08:00", runs7d: 0, failedRuns7d: 0, state: "paused", lastRunAt: "2026-11-01T00:00:00Z", pausedAt: "2026-11-02T00:00:00Z", usage: { unit: "percent", amount7d: 0 } },
       { id: "routine-2", botId: "bot-1", schedule: "every day at 08:00", runs7d: 1, failedRuns7d: 1, state: "failing", lastRunAt: "2026-11-14T08:00:00Z", usage: { unit: "percent", amount7d: 0 } },
@@ -29,7 +32,7 @@ const base: unknown = JSON.parse(
     planUsage: { weeklyLimitUsedPercent: 0, extraCreditsLeftUsdCents: 0, observedAt: "2026-11-15T00:00:00Z", period: "this_week" },
     visibility: ["transcripts", "usage", "otherBots", "auditLog", "accountRole", "tasks", "pages", "botActivity", "routines"].map((signal) => ({ signal, seen: true, why: "Read with the bot's own tools." })),
     evidence: [
-      { id: "ev-1", kind: "excerpt", text: "Never active.", sourceKind: "bot", source: "bot-1" },
+      { id: "ev-1", kind: "excerpt", text: "Never active.", sourceKind: "bot", source: "bot-2" },
       { id: "ev-2", kind: "excerpt", text: "Paused since the start of the month.", sourceKind: "routine", source: "routine-1" },
       { id: "ev-3", kind: "excerpt", text: "Failing.", sourceKind: "routine", source: "routine-2" },
       { id: "ev-4", kind: "excerpt", text: "Needs a sign-in.", sourceKind: "connector", source: "calendar" },

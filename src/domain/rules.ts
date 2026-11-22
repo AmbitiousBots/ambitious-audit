@@ -199,7 +199,15 @@ const subjectsOf = (rule: RuleDefinition, snapshot: CollectorInput): { readonly 
     return { subjects, kind: "connector" };
   }
   if (when.kind === "bot-unused") {
-    const subjects = snapshot.bots.filter((bot) => botUnused(bot, collected, when.olderThanDays)).map((bot) => bot.id);
+    const cutoff = addDays(collected, -when.olderThanDays);
+    const activeOwners = new Set<string>();
+    for (const routine of snapshot.routines) {
+      const lastRun = observedInstant(routine.lastRunAt);
+      if ((routine.runs7d ?? 0) > 0 || (lastRun.known && lastRun.at !== "never" && lastRun.at >= cutoff && lastRun.at <= collected)) {
+        activeOwners.add(routine.botId);
+      }
+    }
+    const subjects = snapshot.bots.filter((bot) => !activeOwners.has(bot.id) && botUnused(bot, collected, when.olderThanDays)).map((bot) => bot.id);
     return { subjects, kind: "bot" };
   }
   if (when.kind === "bots-barely-used") {
