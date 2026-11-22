@@ -354,7 +354,7 @@
           ],
           "minimum": 0,
           "maximum": 100,
-          "description": "Percentage of the weekly limit consumed, as shown by the usage report."
+          "description": "Percentage of the weekly limit consumed, rounded to four decimal places."
         },
         "extraCreditsLeftUsd": {
           "type": [
@@ -552,14 +552,14 @@
         "text": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 280,
-          "description": "The evidence itself, at most 280 characters."
+          "maxLength": 200,
+          "description": "The allowed observation or a description of the recorded evidence kind."
         },
         "source": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 128,
-          "description": "The bot id, routine id, connector name or tool the evidence came from."
+          "maxLength": 200,
+          "description": "The allowed evidence source or a module-generated label."
         }
       }
     },
@@ -777,8 +777,8 @@
         "name": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 120,
-          "description": "The bot's display name as the account shows it."
+          "maxLength": 60,
+          "description": "The normalized account display name or a numbered label when withheld."
         },
         "usageShare": {
           "type": [
@@ -787,7 +787,7 @@
           ],
           "minimum": 0,
           "maximum": 1,
-          "description": "Exact fraction of usage in usagePeriod, or null."
+          "description": "Reported fraction rounded to four decimal places, or null. A positive fraction below 0.0001 is reported as a bound."
         },
         "usageShareBelow": {
           "type": [
@@ -796,7 +796,7 @@
           ],
           "exclusiveMinimum": 0,
           "maximum": 1,
-          "description": "Exclusive upper bound on the share, or null. A value of 0.01 represents <1%."
+          "description": "Exclusive upper bound rounded upward to four decimal places, or null. A value of 0.01 represents <1%."
         },
         "usagePeriod": {
           "enum": [
@@ -832,6 +832,10 @@
         "usagePeriodEnd": {
           "$ref": "#/$defs/timestamp",
           "description": "The end of the share period in UTC, when supplied by the usage report."
+        },
+        "nameWithheld": {
+          "const": true,
+          "description": "Present when the module substituted a numbered label for the account display name."
         }
       },
       "oneOf": [
@@ -903,8 +907,8 @@
         "name": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 120,
-          "description": "The connector's display name as the account shows it."
+          "maxLength": 60,
+          "description": "The normalized account display name or a numbered label when withheld."
         },
         "status": {
           "enum": [
@@ -915,6 +919,10 @@
             "error"
           ],
           "description": "The connector's current status: ok (working), needsAuth (it must be signed in again), needsGrant (it is connected, but this bot has not been given access to it), initializing (still being set up), error (failing for another reason)."
+        },
+        "nameWithheld": {
+          "const": true,
+          "description": "Present when the module substituted a numbered label for the account display name."
         }
       }
     }

@@ -2,7 +2,7 @@ import type { Rng } from "@ambitious/kit/domain/clock";
 import { canonicalJson, visibilityOf } from "./canonical.ts";
 import { completeRoutineList, planUsageOf, routineRunCount } from "./coverage.ts";
 import { fitReportLists } from "./report-size.ts";
-import { reportText } from "./report-text.ts";
+import { reportName, reportObservation } from "./report-text.ts";
 import type { RuleHit } from "./rules.ts";
 import { isReportPayload } from "./schema.ts";
 import { addDays, formatTimestamp, parseTimestamp } from "./time.ts";
@@ -159,7 +159,10 @@ const allocateEvidence = (snapshot: CollectorInput, findings: readonly Finding[]
   const evidence: ReportEvidence[] = [];
   for (const id of selected) {
     const row = available.get(id);
-    if (row) evidence.push({ id, text: reportText(row.text), source: reportText(row.source) });
+    if (row) evidence.push({
+      id, source: reportObservation(row.source) ?? "Collector",
+      text: reportObservation(row.text) ?? (row.kind === "count" ? "The collector recorded a count." : "The collector recorded an excerpt."),
+    });
   }
   const retained = (ids: readonly EvidenceId[]) => ids.filter((id) => selected.has(id));
   return {
@@ -172,8 +175,16 @@ const allocateEvidence = (snapshot: CollectorInput, findings: readonly Finding[]
   };
 };
 
-const reportBot = (bot: CollectorInput["bots"][number]): SendReportPayload["bots"][number] => {
-  const row = { name: reportText(bot.name), lastActiveAt: bot.lastActiveAt, routineCount: bot.routineCount };
+const reportedShare = (value: number, unit: "share" | "shareBelow" | "percent"): { usageShare: number; usageShareBelow: null } | { usageShare: null; usageShareBelow: number } => {
+  const units = Math.round(value * (unit === "percent" ? 100 : 10000));
+  const rounded = units / 10000;
+  if (unit === "shareBelow") return { usageShare: null, usageShareBelow: rounded < value ? (units + 1) / 10000 : rounded };
+  if (value > 0 && value < (unit === "percent" ? 0.01 : 0.0001)) return { usageShare: null, usageShareBelow: 0.0001 };
+  return { usageShare: rounded, usageShareBelow: null };
+};
+
+const reportBot = (bot: CollectorInput["bots"][number], index: number): SendReportPayload["bots"][number] => {
+  const row = { ...reportName(bot.name, "Bot", index), lastActiveAt: bot.lastActiveAt, routineCount: bot.routineCount };
   const usage = bot.usage;
   if (usage?.unit === "share") {
     const period = {
@@ -181,11 +192,11 @@ const reportBot = (bot: CollectorInput["bots"][number]): SendReportPayload["bots
       ...(usage.periodStart === undefined ? {} : { usagePeriodStart: usage.periodStart }),
       ...(usage.periodEnd === undefined ? {} : { usagePeriodEnd: usage.periodEnd }),
     };
-    return "share" in usage
-      ? { ...row, ...period, usageShare: usage.share, usageShareBelow: null }
-      : { ...row, ...period, usageShare: null, usageShareBelow: usage.shareBelow };
+    return { ...row, ...period, ...("share" in usage ? reportedShare(usage.share, "share") : reportedShare(usage.shareBelow, "shareBelow")) };
   }
-  if (usage?.unit === "percent") return { ...row, usageShare: usage.amount7d / 100, usageShareBelow: null, usagePeriod: "last_7_days" };
+  if (usage?.unit === "percent") {
+    return { ...row, ...reportedShare(usage.amount7d, "percent"), usagePeriod: "last_7_days" };
+  }
   return { ...row, usageShare: null, usageShareBelow: null, usagePeriod: null };
 };
 
@@ -245,13 +256,13 @@ export const assembleReport = (
     summary: summaryOf(findings, visibility, withheldRules(hits).length),
     counts: countsOf(snapshot),
     bots: snapshot.bots.map(reportBot),
-    connectors: snapshot.connectors.map(({ name, status }) => ({ name: reportText(name), status })),
+    connectors: snapshot.connectors.map(({ name, status }, index) => ({ ...reportName(name, "Connector", index), status })),
     planUsage: planUsageOf(snapshot),
     findings,
     recommendations,
     announcements: selectAnnouncements(announcements),
     evidence,
-    visibility: visibility.map((entry) => ({ ...entry, why: reportText(entry.why) })),
+    visibility,
     moduleVersions: { audit: version },
   });
   if (!isReportPayload(payload)) throw new Error("The report payload does not match send_report.");

@@ -105,11 +105,12 @@ const referenceMs = (snapshot: CollectorInput): number => {
   return parsed;
 };
 
-const evidenceFor = (snapshot: CollectorInput, keys: readonly string[]): EvidenceId[] => {
-  const wanted = new Set(keys.map((key) => key.toLowerCase()));
+const evidenceFor = (snapshot: CollectorInput, keys: readonly string[], exact: boolean): EvidenceId[] => {
+  const sourceKey = (key: string) => exact ? key : key.toLowerCase();
+  const wanted = new Set(keys.map(sourceKey));
   const ids: EvidenceId[] = [];
   for (const item of snapshot.evidence) {
-    if (!wanted.has(item.source.toLowerCase())) continue;
+    if (!wanted.has(sourceKey(item.source))) continue;
     if (isEvidenceId(item.id) && !ids.includes(item.id)) ids.push(item.id);
   }
   return ids.slice(0, 10);
@@ -129,7 +130,7 @@ const hit = (rule: RuleDefinition, snapshot: CollectorInput, subjects: readonly 
     rule,
     subjects,
     withheld: rule.dependsOnRole && snapshot.account.kind === "unknown",
-    evidenceIds: evidenceFor(snapshot, evidenceKeys),
+    evidenceIds: evidenceFor(snapshot, evidenceKeys, rule.when.kind === "bot-unused" || rule.when.kind === "bots-barely-used"),
     summary: sentence(rule.summary, subjects.length),
     fingerprint: fingerprintFor(rule.id, subjects),
   };

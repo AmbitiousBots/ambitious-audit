@@ -5,7 +5,7 @@
   "rank": 70,
   "dependsOnRole": true,
   "title": "Review bots with a small share of usage",
-  "why": "Check whether the work assigned to each bot still needs its own schedule.",
+  "why": "Check whether the measured usage is expected for each bot's work.",
   "summary": {
     "one": "One bot accounted for under 1% of usage during its measured period.",
     "many": "{count} bots each accounted for under 1% of usage during their respective measured periods."

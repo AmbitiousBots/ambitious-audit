@@ -38,6 +38,8 @@ export const WIRE_PATTERNS = {
 } as const;
 
 export const WIRE_LIMITS = {
+  reportNameCharacters: 60,
+  reportObservationCharacters: 200,
   summaryCharacters: 1200,
   evidenceTextCharacters: 280,
   feedbackTextCharacters: 4000,

@@ -1,14 +1,21 @@
+import { reportObservation } from "./report-text.ts";
 import { addDays, observedInstant } from "./time.ts";
 import type { CollectorInput, SendReportPayload, VisibilityEntry } from "./types.ts";
 
 export const planUsageOf = (snapshot: CollectorInput): SendReportPayload["planUsage"] => {
-  if (snapshot.planUsage !== undefined) {
-    const { weeklyLimitUsedPercent, extraCreditsLeftUsdCents, observedAt, period } = snapshot.planUsage;
-    return { weeklyLimitUsedPercent, extraCreditsLeftUsd: extraCreditsLeftUsdCents === null ? null : extraCreditsLeftUsdCents / 100, observedAt, period };
-  }
   const legacy = snapshot.weeklyLimitUsed;
-  if (!legacy || legacy.percent > 100) return null;
-  return { weeklyLimitUsedPercent: legacy.percent, extraCreditsLeftUsd: null, observedAt: legacy.asOf, period: "this_week" };
+  const legacyPercent = legacy && legacy.percent <= 100 ? legacy.percent : null;
+  const plan = snapshot.planUsage;
+  const compatible = plan?.period === "this_week" && plan.observedAt !== null && legacy !== undefined &&
+    Date.parse(plan.observedAt) === Date.parse(legacy.asOf);
+  if (!plan && legacyPercent === null) return null;
+  const percent = plan ? plan.weeklyLimitUsedPercent ?? (compatible ? legacyPercent : null) : legacyPercent;
+  return {
+    weeklyLimitUsedPercent: percent === null ? null : Number(percent.toFixed(4)),
+    extraCreditsLeftUsd: plan?.extraCreditsLeftUsdCents == null ? null : plan.extraCreditsLeftUsdCents / 100,
+    observedAt: plan ? plan.observedAt : legacy?.asOf ?? null,
+    period: plan ? plan.period : "this_week",
+  };
 };
 
 const allBotsListed = (input: CollectorInput): boolean =>
@@ -40,66 +47,87 @@ export const routineRunCount = (
   return count;
 };
 
-const coverage = (
-  entry: VisibilityEntry, observed: boolean, complete: boolean,
-  why: { readonly partial: string; readonly unseen: string },
-): VisibilityEntry => {
-  if (entry.seen === true && complete) return entry;
-  const seen = observed ? "partial" : false;
-  if (entry.seen !== true) return { ...entry, seen };
-  return { ...entry, seen, why: observed ? why.partial : why.unseen };
+type Measure = { label: string; observed: boolean; complete: boolean };
+
+const measure = (label: string, observed: boolean, complete = observed): Measure => ({ label, observed, complete });
+
+const coverage = (entry: VisibilityEntry, observed: boolean, complete: boolean, measures: readonly Measure[]): VisibilityEntry => {
+  const seen = entry.seen === true && complete ? true : observed ? "partial" : false;
+  const explanation = reportObservation(entry.why);
+  if (seen === entry.seen && explanation !== null) return { ...entry, why: explanation };
+
+  const names = (items: readonly Measure[]) => items.map(({ label }) => label).join(", ");
+  const known = names(measures.filter((item) => item.observed && item.complete));
+  const partial = names(measures.filter((item) => item.observed && !item.complete));
+  const missing = names(measures.filter((item) => !item.observed && !item.complete));
+  const sentences = [];
+  if (known) sentences.push(`Observed ${known}.`);
+  if (partial) sentences.push(`Partially observed ${partial}.`);
+  if (missing) sentences.push(`Missing ${missing}.`);
+  if (seen === "partial" && !partial && !missing) sentences.push("Account-wide coverage is unknown.");
+  if (seen !== entry.seen && explanation) {
+    const sharedOnly = /\b(?:only|limited to|restricted to) (?:the |a )?shared[- ]folders?\b|\bshared[- ]folders? only\b/iu;
+    const scopeStatement = /\b(?:access|scope|view) (?:was |is )?(?:limited|restricted) to\b|\b(?:read|see|view|access) only\b|^only .+ (?:visible|accessible)\b/iu;
+    if (sharedOnly.test(explanation)) sentences.push("Access limited to shared folders.");
+    else if (scopeStatement.test(explanation) && !/[.!?].+\S/u.test(explanation) && sentences.join(" ").length + explanation.length < 200) {
+      sentences.push(explanation);
+    }
+  }
+  return { ...entry, seen, why: sentences.join(" ") || (seen === true ? "The collector reported complete coverage." : "No readings were reported.") };
 };
 
 const usageCoverage = (input: CollectorInput, entry: VisibilityEntry): VisibilityEntry => {
   const plan = planUsageOf(input);
   const planObserved = plan !== null && (plan.weeklyLimitUsedPercent !== null || plan.extraCreditsLeftUsd !== null);
   const planComplete = plan !== null && Object.values(plan).every((value) => value !== null);
-  const observed = planObserved || input.usageOther !== undefined ||
-    input.bots.some((bot) => bot.usage !== null) || input.routines.some((routine) => routine.usage !== null);
-  const botsComplete = !input.usageOther && allBotsListed(input) && input.bots.every(({ usage }) =>
-    usage?.unit === "percent" || (usage?.unit === "share" && usage.share !== undefined));
+  const botObserved = input.bots.some((bot) => bot.usage !== null);
+  const routineObserved = input.routines.some((routine) => routine.usage !== null);
+  const exactShare = ({ usage }: CollectorInput["bots"][number]) =>
+    usage?.unit === "percent" || (usage?.unit === "share" && usage.share !== undefined);
+  const botsComplete = !input.usageOther && allBotsListed(input) && input.bots.every(exactShare);
   const routinesComplete = completeRoutineList(input) && input.routines.every((routine) => routine.usage !== null);
-  return coverage(entry, observed, botsComplete && routinesComplete && planComplete, {
-    partial: [
-      ...(botsComplete ? [] : ["Some bot shares are missing or bounded."]),
-      ...(input.usageOther === undefined ? [] : ["The usage report includes one summed line for the rest."]),
-      ...(routinesComplete ? [] : ["Routine usage is incomplete."]),
-      ...(planComplete ? [] : ["Plan readings are incomplete."]),
-    ].join(" "),
-    unseen: "No bot, routine or plan usage reading was reported.",
-  });
+  return coverage(entry, planObserved || input.usageOther !== undefined || botObserved || routineObserved, botsComplete && routinesComplete && planComplete, [
+    measure("exact shares", input.bots.some(exactShare), botsComplete), measure("routine usage", routineObserved, routinesComplete),
+    ...(input.bots.some(({ usage }) => usage?.unit === "share" && usage.shareBelow !== undefined) ? [measure("bounds", true)] : []),
+    ...(input.bots.some(({ usage }) => usage?.unit === "credits") ? [measure("bot credits", true)] : []),
+    ...(input.usageOther ? [measure("one summed line for the rest", true)] : []),
+    measure("weekly limit", plan?.weeklyLimitUsedPercent != null), measure("credit balance", plan?.extraCreditsLeftUsd != null),
+    measure("plan time", plan?.observedAt != null), measure("plan period", plan?.period != null),
+  ]);
 };
 
+const inventoryMeasure = <T>(label: string, rows: readonly T[], present: (row: T) => boolean, listed: boolean) =>
+  measure(label, rows.some(present), listed && rows.every(present));
+
 export const reportCoverage = (input: CollectorInput, entry: VisibilityEntry): VisibilityEntry => {
-  if (entry.signal === "otherBots" && entry.seen === false && input.bots.some((bot) => bot.id !== input.bots[0]?.id)) return { ...entry, seen: "partial" };
+  if (entry.signal === "otherBots" && entry.seen === false && input.bots.length > 1) {
+    return coverage(entry, true, false, [measure("listed bots", true), measure("full bot inventory", false)]);
+  }
   if (entry.signal === "usage") return usageCoverage(input, entry);
   if (entry.signal === "botActivity") {
-    const observed = input.bots.some((bot) => bot.lastActiveAt !== null);
-    const complete = (observed || entry.seen === true) && allBotsListed(input) && input.bots.every((bot) => bot.lastActiveAt !== null);
-    return coverage(entry, observed, complete, {
-      partial: "Activity was reported for part of the bot inventory.",
-      unseen: "No bot activity reading was reported.",
-    });
+    const activity = inventoryMeasure("last activity", input.bots, (bot) => bot.lastActiveAt !== null, allBotsListed(input));
+    return coverage(entry, activity.observed, activity.complete, [activity]);
   }
   if (entry.signal === "routines") {
-    const observed = input.routines.length > 0 || input.bots.some((bot) => bot.routineCount !== null);
+    const listed = completeRoutineList(input);
     const collected = Date.parse(input.collectedAt);
-    const complete = completeRoutineList(input) && input.bots.every((bot) => bot.routineCount !== null) &&
-      input.routines.every((routine) => routine.lastRunAt !== null &&
-        routineRunCount(routine, "runs7d", collected) !== null && routineRunCount(routine, "failedRuns7d", collected) !== null);
-    return coverage(entry, observed, complete, {
-      partial: "The routine inventory or its run history is incomplete.",
-      unseen: "No routine inventory or run history was reported.",
-    });
+    const measures = [
+      measure("routine inventory", input.routines.length > 0, listed),
+      inventoryMeasure("routine counts", input.bots, (bot) => bot.routineCount !== null, true),
+      inventoryMeasure("last runs", input.routines, (row) => row.lastRunAt !== null, listed),
+      inventoryMeasure("weekly runs", input.routines, (row) => routineRunCount(row, "runs7d", collected) !== null, listed),
+      inventoryMeasure("weekly failures", input.routines, (row) => routineRunCount(row, "failedRuns7d", collected) !== null, listed),
+    ];
+    return coverage(entry, measures.some((item) => item.observed), measures.every((item) => item.complete), measures);
   }
   if (entry.signal === "tasks" || entry.signal === "pages") {
-    const tasks = input.tasks;
-    const label = entry.signal === "tasks" ? "task" : "page";
-    const counts = entry.signal === "tasks" ? [tasks.open, tasks.stale7d, tasks.blocked, tasks.closed7d] : [input.pages.count, input.pages.updated7d];
-    return coverage(entry, counts.some((count) => count != null), counts.every((count) => count != null), {
-      partial: `Some ${label} counts were unavailable.`,
-      unseen: `No ${label} counts were reported.`,
-    });
+    const { open, stale7d, blocked, closed7d } = input.tasks;
+    const measures = entry.signal === "tasks" ? [
+      measure("open tasks", open !== null), measure("stale tasks", stale7d !== null),
+      measure("blocked tasks", blocked !== null), measure("seven-day closures", closed7d != null),
+    ] : [measure("page count", input.pages.count !== null), measure("seven-day page updates", input.pages.updated7d !== null)];
+    return coverage(entry, measures.some((item) => item.observed), measures.every((item) => item.complete), measures);
   }
-  return entry;
+  const status = entry.seen === true ? "complete" : entry.seen === "partial" ? "partial" : "unobserved";
+  return { ...entry, why: reportObservation(entry.why) ?? `The collector marked this signal as ${status}.` };
 };

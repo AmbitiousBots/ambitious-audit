@@ -24,7 +24,8 @@
     },
     {
       "lastActiveAt": null,
-      "name": "Work queue 3",
+      "name": "Bot 3",
+      "nameWithheld": true,
       "routineCount": 0,
       "usagePeriod": "last_7_days",
       "usagePeriodEnd": "2026-11-15T00:00:00Z",
@@ -128,7 +129,13 @@
       "stale7d": 0
     }
   },
-  "evidence": [],
+  "evidence": [
+    {
+      "id": "ev-1",
+      "source": "Collector",
+      "text": "The measured share was below one percent."
+    }
+  ],
   "findings": [
     {
       "evidenceIds": [],
@@ -139,7 +146,9 @@
       "summary": "1 connector is connected, but this bot has no access to it."
     },
     {
-      "evidenceIds": [],
+      "evidenceIds": [
+        "ev-1"
+      ],
       "kind": "rule",
       "priority": "low",
       "ruleId": "bots-barely-used",
@@ -200,8 +209,19 @@
     "period": "this_week",
     "weeklyLimitUsedPercent": 58.5
   },
-  "recommendations": [],
-  "reportId": "01a1dc80-f000-727d-81dd-d207b8b48402",
+  "recommendations": [
+    {
+      "effort": "small",
+      "evidenceIds": [
+        "ev-1"
+      ],
+      "id": "bots-barely-used",
+      "priority": "low",
+      "title": "Review bots with a small share of usage",
+      "why": "Check whether the measured usage is expected for each bot's work."
+    }
+  ],
+  "reportId": "01a1dc80-f000-7509-8b29-e6ec10cf689a",
   "schemaVersion": 4,
   "summary": "1 connector is connected, but this bot has no access to it. 6 bots each accounted for under 1% of usage during their respective measured periods. Not observed: conversation text, the audit log, page counts. Partially observed: bot, routine and plan usage, when each bot was last active.",
   "visibility": [

@@ -17,7 +17,7 @@ const SCHEMAS = [
   // WHY: V3 adds ten announcements, each with a 64-character id and a 120-character title: 29000 + 10 * (64 + 120). Priority enums add no free text.
   { file: "send_report.v3.json", typeName: "SendReportV3", sentToService: true, maxTextCharacters: 30840 },
   // WHY: Each of 200 bots adds a name and three timestamps. V4 also adds 200 connector names and one plan timestamp.
-  { file: "send_report.v4.json", typeName: "SendReportV4", sentToService: true, maxTextCharacters: 93264 },
+  { file: "send_report.v4.json", typeName: "SendReportV4", sentToService: true, maxTextCharacters: 69024 },
   { file: "send_feedback.v1.json", typeName: "SendFeedbackV1", sentToService: true, maxTextCharacters: 4100 },
 ];
 
@@ -289,9 +289,14 @@ const domainAgreement = async (loaded) => {
       ["WIRE_PATTERNS.timestamp", WIRE_PATTERNS.timestamp.source, report.$defs.timestamp.pattern],
       ["WIRE_PATTERNS.semver", WIRE_PATTERNS.semver.source, report.$defs.semver.pattern],
       ["WIRE_LIMITS.summaryCharacters", WIRE_LIMITS.summaryCharacters, report.properties.summary.maxLength],
-      ["WIRE_LIMITS.evidenceTextCharacters", WIRE_LIMITS.evidenceTextCharacters, report.$defs.evidence.properties.text.maxLength],
       ["WIRE_LIMITS.recommendations", WIRE_LIMITS.recommendations, report.properties.recommendations.maxItems],
     ]),
+    ...["bot", "connector"].map((kind) =>
+      ["WIRE_LIMITS.reportNameCharacters", WIRE_LIMITS.reportNameCharacters, schema.SendReportV4.$defs[kind].properties.name.maxLength]),
+    ...["source", "text"].map((field) =>
+      ["WIRE_LIMITS.reportObservationCharacters", WIRE_LIMITS.reportObservationCharacters, schema.SendReportV4.$defs.evidence.properties[field].maxLength]),
+    ...[schema.SendReportV2, schema.SendReportV3].map((report) =>
+      ["WIRE_LIMITS.evidenceTextCharacters", WIRE_LIMITS.evidenceTextCharacters, report.$defs.evidence.properties.text.maxLength]),
     ["WIRE_PATTERNS.uuidV7", WIRE_PATTERNS.uuidV7.source, schema.SendFeedbackV1.$defs.uuidV7.pattern],
     ...[schema.CollectorV1, schema.CollectorV2].flatMap((collector) => [
       ["WIRE_PATTERNS.evidenceId", WIRE_PATTERNS.evidenceId.source, collector.$defs.evidenceId.pattern],
@@ -316,8 +321,8 @@ const domainAgreement = async (loaded) => {
 const REQUIRED_LIMITS = [
   ["send_report.v4.json bots", (s) => s.SendReportV4.properties.bots.maxItems, 200],
   ["send_report.v4.json connectors", (s) => s.SendReportV4.properties.connectors.maxItems, 200],
-  ["send_report.v4.json bot name", (s) => s.SendReportV4.$defs.bot.properties.name.maxLength, 120],
-  ["send_report.v4.json connector name", (s) => s.SendReportV4.$defs.connector.properties.name.maxLength, 120],
+  ["send_report.v4.json bot name", (s) => s.SendReportV4.$defs.bot.properties.name.maxLength, 60],
+  ["send_report.v4.json connector name", (s) => s.SendReportV4.$defs.connector.properties.name.maxLength, 60],
   ["send_report.v1.json summary", (s) => s.SendReportV1.properties.summary.maxLength, 1200],
   ["send_report.v1.json evidence text", (s) => s.SendReportV1.$defs.evidence.properties.text.maxLength, 280],
   ["collector.v1.json evidence text", (s) => s.CollectorV1.$defs.evidence.properties.text.maxLength, 280],

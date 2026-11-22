@@ -198,8 +198,11 @@ export const normalizeCollector = (input: CollectorInput, schemaCommand: string)
       : { usageOther: { share: input.usageOther.share, ...(input.usageOther.botCount === undefined ? {} : { botCount: input.usageOther.botCount }) } }),
     ...(input.weeklyLimitUsed === undefined ? {} : { weeklyLimitUsed: { percent: input.weeklyLimitUsed.percent, asOf: input.weeklyLimitUsed.asOf } }),
     ...(input.planUsage === undefined ? {} : { planUsage: { ...input.planUsage } }),
-    visibility: orderedVisibility(input).map((entry) =>
-      input.schemaVersion === 2 && ["usage", "tasks", "pages"].includes(entry.signal) ? reportCoverage(input, entry) : entry),
+    visibility: orderedVisibility(input).map((entry) => {
+      if (input.schemaVersion === 1 || !["usage", "tasks", "pages"].includes(entry.signal)) return entry;
+      const coverage = reportCoverage(input, entry);
+      return coverage.seen === entry.seen ? entry : coverage;
+    }),
     evidence,
   };
 };
