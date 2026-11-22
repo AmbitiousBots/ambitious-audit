@@ -1,6 +1,6 @@
 import type { Rng } from "@ambitious/kit/domain/clock";
 import { canonicalJson, visibilityOf } from "./canonical.ts";
-import { completeRoutineList, planUsageOf } from "./coverage.ts";
+import { completeRoutineList, planUsageOf, routineRunCount } from "./coverage.ts";
 import { fitReportLists } from "./report-size.ts";
 import { reportText } from "./report-text.ts";
 import type { RuleHit } from "./rules.ts";
@@ -193,11 +193,12 @@ const routineCounts = (snapshot: CollectorInput): SendReportPayload["counts"]["r
   if (!completeRoutineList(snapshot)) return { active: null, paused: null, failing: null, runs7d: null, failedRuns7d: null };
   const states = { active: 0, paused: 0, failing: 0 };
   for (const routine of snapshot.routines) states[routine.state]++;
+  const collected = Date.parse(snapshot.collectedAt);
   const sum = (field: "runs7d" | "failedRuns7d"): number | null => {
     let total = 0;
     for (const routine of snapshot.routines) {
-      const count = routine[field];
-      if (count === null || count === undefined) return null;
+      const count = routineRunCount(routine, field, collected);
+      if (count === null) return null;
       total += count;
     }
     return total;

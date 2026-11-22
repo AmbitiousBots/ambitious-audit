@@ -5,7 +5,7 @@ import unobserved from "../schemas/examples/collector.v2/valid/unobserved.json" 
 import legacy from "./fixtures/shares.json" with { type: "json" };
 import { createHash } from "node:crypto";
 import { canonicalJson } from "../src/domain/canonical.ts";
-import { MCP_ENVELOPE_BYTES, REQUEST_BYTE_LIMIT } from "../src/domain/report-size.ts";
+import { MCP_ENVELOPE_BYTES, RECEIVER_BYTE_LIMIT, REQUEST_BYTE_LIMIT } from "../src/domain/report-size.ts";
 import type { CollectorV2BotUsage } from "../src/domain/wire.generated.ts";
 import { parseCollector } from "../src/domain/input.ts";
 import { assembleReport } from "../src/domain/report.ts";
@@ -31,6 +31,8 @@ test("nine exact shares and eight bounds survive missing routine access", () => 
   const payload = report(snapshot);
   assert.equal(payload.bots.filter((bot) => bot.usageShare === 0.11 && bot.usageShareBelow === null).length, 9);
   assert.equal(payload.bots.filter((bot) => bot.usageShareBelow === 0.01 && bot.usageShare === null).length, 8);
+  assert.equal(payload.visibility.find((entry) => entry.signal === "otherBots")?.seen, "partial");
+  assert.match(payload.findings.find((item) => item.ruleId === "visibility-other-bots")?.summary ?? "", /Partially observed/);
   assert.ok(payload.bots.every((bot) => bot.usagePeriod === "last_7_days"));
   assert.deepEqual(payload.counts.routines, { active: null, paused: null, failing: null, runs7d: null, failedRuns7d: null });
   assert.ok(payload.findings.some((item) => item.ruleId === "bots-barely-used"));
@@ -50,6 +52,25 @@ test("a thirty-day bound cannot establish zero usage, even across a full bot inv
   assert.ok(report({ ...unobserved, bots: week }).findings.some((item) => item.ruleId === "bots-barely-used"));
   const idle = report({ ...unobserved, bots: bots.map((bot) => ({ ...bot, lastActiveAt: "never" })) });
   assert.ok(idle.findings.some((item) => item.ruleId === "bot-unused"));
+});
+
+test("current-period usage overrides an old last-active reading through collection time in a v1 snapshot", () => {
+  const snapshot = (share: number, periodStart: string, periodEnd: string) => {
+    const bot = { id: "queue", name: "Work queue", routineCount: null, lastActiveAt: "2026-10-01T00:00:00Z",
+      usage: { unit: "share", period: "this_week", share, periodStart, periodEnd } };
+    return report({ ...legacy, bots: [bot], routines: [],
+      visibility: legacy.visibility.map((entry) => entry.signal === "routines" ? { ...entry, seen: false } : entry),
+      evidence: [{ id: "ev-1", kind: "excerpt", source: bot.id, text: "Activity history from the account." }] });
+  };
+  for (const [share, start, end, idle] of [
+    [0.25, "2026-11-09", "2026-11-16", false], [0.25, "2026-11-01", "2026-11-16", false],
+    [0, "2026-11-09", "2026-11-16", true], [0.25, "2026-11-16", "2026-11-23", true],
+    [0.25, "2026-10-01", "2026-10-08", true],
+  ] as const) {
+    const payload = snapshot(share, start + "T00:00:00Z", end + "T00:00:00Z");
+    assert.equal(payload.findings.some((row) => row.ruleId === "bot-unused"), idle);
+    assert.equal(payload.recommendations.some((row) => row.id === "bot-unused"), idle);
+  }
 });
 
 test("bot rows retain each supplied share boundary for both exact shares and bounds", () => {
@@ -78,14 +99,21 @@ test("task and page readings determine coverage and visibility findings, includi
     const partial = report({ ...unobserved, tasks, pages });
     assert.deepEqual(partial.counts.tasks, tasks);
     assert.deepEqual(partial.counts.pages, pages);
-    const complete = report({ ...unobserved, tasks: { open: 0, stale7d: 0, blocked: 0, closed7d: count }, pages: { count, updated7d: 0 } });
+    const readings = { ...unobserved, tasks: { open: 0, stale7d: 0, blocked: 0, closed7d: count }, pages: { count, updated7d: 0 } };
+    const why = "The tool could read only the shared folder.";
+    for (const seen of [false, "partial", true]) {
+      const payload = report({ ...readings, visibility: readings.visibility.map((entry) =>
+        ["tasks", "pages"].includes(entry.signal) ? { ...entry, seen, why } : entry) });
+      for (const signal of ["tasks", "pages"]) {
+        assert.deepEqual(payload.visibility.find((entry) => entry.signal === signal), { signal, seen: seen === true ? true : "partial", why });
+        assert.equal(payload.findings.some((item) => item.ruleId === `visibility-${signal}`), seen !== true);
+      }
+    }
     const unseen = report({ ...unobserved, visibility: unobserved.visibility.map((entry) =>
       ["tasks", "pages"].includes(entry.signal) ? { ...entry, seen: "partial" } : entry) });
     for (const signal of ["tasks", "pages"]) {
       assert.equal(partial.visibility.find((entry) => entry.signal === signal)?.seen, "partial");
       assert.match(partial.findings.find((item) => item.ruleId === `visibility-${signal}`)?.summary ?? "", /Partially observed/);
-      assert.equal(complete.visibility.find((entry) => entry.signal === signal)?.seen, true);
-      assert.equal(complete.findings.some((item) => item.ruleId === `visibility-${signal}`), false);
       assert.equal(unseen.visibility.find((entry) => entry.signal === signal)?.seen, false);
     }
   }
@@ -93,7 +121,7 @@ test("task and page readings determine coverage and visibility findings, includi
 
 test("failed runs cannot exceed measured runs on a routine or report", () => {
   const withRuns = (runs7d: number | null, failedRuns7d: number | null) => ({
-    ...weekly, routines: weekly.routines.map((row) => ({ ...row, runs7d, failedRuns7d })),
+    ...weekly, routines: weekly.routines.map((row) => ({ ...row, runs7d, failedRuns7d, lastRunAt: runs7d === 0 ? "never" : row.lastRunAt })),
     visibility: weekly.visibility.map((entry) => entry.signal === "routines" ? { ...entry, seen: "partial" } : entry),
   });
   assert.throws(() => parseCollector(withRuns(0, 3)), /\/routines\/0\/failedRuns7d.*failed-runs-range/);
@@ -104,6 +132,19 @@ test("failed runs cannot exceed measured runs on a routine or report", () => {
   }
   const payload = report(weekly);
   assert.equal(isReportPayload({ ...payload, counts: { ...payload.counts, routines: { ...payload.counts.routines, runs7d: 0, failedRuns7d: 3 } } }), false);
+});
+
+test("routine totals and coverage agree with lastRunAt over the seven days through collection", () => {
+  for (const [lastRunAt, runs7d, failedRuns7d, runs, failed] of [
+    ["never", 4, 2, null, null], ["never", 4, 0, null, 0], ["never", 0, 0, 0, 0],
+    ["2026-11-07T23:59:59Z", 1, 1, null, null], ["2026-11-07T23:59:59Z", 0, 0, 0, 0],
+    ["2026-11-08T00:00:00Z", 0, 0, null, 0], ["2026-11-14T00:00:00Z", 0, 0, null, 0],
+    [weekly.collectedAt, 0, 0, null, 0], [weekly.collectedAt, 2, 0, 2, 0],
+  ] as const) {
+    const payload = report({ ...weekly, routines: weekly.routines.map((row) => ({ ...row, lastRunAt, runs7d, failedRuns7d })) });
+    assert.deepEqual(payload.counts.routines, { active: 1, paused: 0, failing: 0, runs7d: runs, failedRuns7d: failed });
+    assert.equal(payload.visibility.find((entry) => entry.signal === "routines")?.seen, runs === null || failed === null ? "partial" : true);
+  }
 });
 
 test("each routine total requires its own complete observations", () => {
@@ -153,32 +194,40 @@ test("exact and bounded shares exclude each other in the wire type", () => {
   assert.throws(() => parseCollector({ ...weekly, bots: weekly.bots.map((bot) => ({ ...bot, usage: invalid })) }));
 });
 
-test("the report redacts private fields after matching evidence and retains each record", () => {
-  const privateValues = [
-    "desk@example.invalid", "+1 (202) 555-0148", "555-0182", "https://sample:fixture@example.invalid/path",
-    "https://example.invalid/items?q=sample", "token=fixture", "Bearer sample.sample.sample",
-    "sk-test-syntheticcredential", "a7B9c1D3e5F7g9H1i3J5k7L9",
-    "202‑555‑0148", "２０２－５５５－０１４８", "202\u202f555\u20090148", "202−555—0148",
-    "202\u00ad555\u00a00148", '{"token":"sample-value"}', "ｔｏｋｅｎ＝sample", "api_key: sample", "password sample",
+test("the report filters private text and keeps ordinary names across all five free-text fields", () => {
+  const redact = [
+    "desk@example.invalid", "https://sample:fixture@example.invalid/path", "https://example.invalid/items?q=sample",
+    "sk-test-syntheticcredential", "a7B9c1D3e5F7g9H1i3J5k7L9", "client_secret=sample-value",
+    '{"refresh_token":"sample-value"}', "path?option=one&userPassword=sample", "prefix-PASSWD-end: sample",
+    "my_pwd_hint sample", "proxyAuthHeader sample", "'toolCredentials': 'sample'", "API key=sample",
+    "nestedAPIKeyValue sample", '“private-key-file”：“sample”', "sessionId=sample", "cookieJar: sample",
+    "currentBearerHeader sample", "ｔｏｋｅｎ＝sample", "accessToken sample", "`auth` = sample",
+    '{"nested.token.setting":"sample"}', "auth[session]=sample", '"token" "sample"', "api_key: sample", "password sample",
+    "Bearer sample.sample.sample", "Basic YWJjZA==", "Basic QUJD", "Digest deadbeef", "Token Ab3x", "basic abcdefghijklmnop",
+    "+1 (202) 555-0148", "555-0182", "020/7946/0958", "２０２－５５５－０１４８", "202\u202f555\u20090148",
+    "202−555—0148", "202\u00ad555\u00a00148", "٥٥٥.٠١٨٢", "1+(23)/45.67", "555⁄01·82",
   ];
-  for (const value of privateValues) {
-    const source = `Queue ${value}`;
-    const payload = report({
-      ...weekly, bots: weekly.bots.map((bot) => ({ ...bot, name: source })),
-      connectors: [{ name: source, status: "needsAuth" }, { name: value, status: "ok" }],
-      evidence: [{ id: "ev-1", kind: "excerpt", text: `From ${value}`, source }],
-      visibility: weekly.visibility.map((entry) => ({ ...entry, why: `Observed via ${value}` })),
-    });
-    assert.equal(JSON.stringify(payload).includes(value), false);
-    assert.equal(payload.bots.length, weekly.bots.length);
-    assert.ok(payload.bots.every((row) => row.name === "[redacted]"));
-    assert.deepEqual(payload.connectors.map((row) => row.name), ["[redacted]", "[redacted]"]);
-    assert.deepEqual(payload.evidence, [{ id: "ev-1", source: "[redacted]", text: "[redacted]" }]);
-    assert.deepEqual(payload.recommendations[0]?.evidenceIds, ["ev-1"]);
-    assert.ok(payload.visibility.every((entry) => entry.why === "[redacted]"));
+  const keep = [
+    "Basic Bookkeeping", "Basic Operations", "Digest Printing", "Token Studio", "Bearer Services",
+    "Dental Care", "Tool & Die", "Market 24", "Repair Desk (123) 456", "Studio 7 / Suite 42",
+    "Food Pantry", "Software Support", "Neighborhood Salon", "Café Services",
+  ];
+  for (const [values, privateValue] of [[redact, true], [keep, false]] as const) {
+    for (const value of values) {
+      const payload = report({
+        ...weekly, bots: weekly.bots.map((bot) => ({ ...bot, name: value })),
+        connectors: [{ name: value, status: "needsAuth" }],
+        evidence: [{ id: "ev-1", kind: "excerpt", text: `Reading from ${value}`, source: value }],
+        visibility: weekly.visibility.map((entry) => ({ ...entry, why: `Observed via ${value}` })),
+      });
+      const expected = privateValue ? "[redacted]" : value;
+      assert.deepEqual(payload.bots.map((row) => row.name), weekly.bots.map(() => expected), value);
+      assert.deepEqual(payload.connectors.map((row) => row.name), [expected], value);
+      assert.deepEqual(payload.evidence, [{ id: "ev-1", source: expected, text: privateValue ? expected : `Reading from ${value}` }], value);
+      assert.deepEqual(payload.visibility.map((entry) => entry.why), weekly.visibility.map(() => privateValue ? expected : `Observed via ${value}`), value);
+      assert.deepEqual(payload.recommendations[0]?.evidenceIds, ["ev-1"], value);
+    }
   }
-  const clean = report(weekly);
-  assert.deepEqual(clean.bots.map((row) => row.name), weekly.bots.map((row) => row.name));
 });
 
 test("legacy activity and routine readings produce partial v4 coverage and preserve the stored snapshot hash", () => {
@@ -199,7 +248,9 @@ test("activity and routine coverage reflect complete, mixed and absent v2 readin
   };
   const activity = (raw: unknown) => report(raw).visibility
     .filter((entry) => entry.signal === "botActivity" || entry.signal === "routines").map((entry) => entry.seen);
-  assert.deepEqual(activity(observed), [true, true]);
+  assert.deepEqual(activity(observed), ["partial", "partial"]);
+  assert.deepEqual(activity({ ...observed, visibility: weekly.visibility.map((entry) =>
+    entry.signal === "botActivity" ? { ...entry, seen: true } : entry) }), [true, true]);
   assert.deepEqual(activity({ ...observed, bots: weekly.bots, routines: [] }), ["partial", "partial"]);
   assert.deepEqual(activity(unobserved), [false, false]);
 });
@@ -260,7 +311,7 @@ test("the serialized UTF-8 send_report request fits at the byte limit and trunca
   const space = REQUEST_BYTE_LIMIT - wireBytes(baseline, requestId);
   const pad = (name: string, index: number): string => {
     const bytes = Math.floor(space / 400) + Number(index < space % 400);
-    return name + "𠀀".repeat(Math.floor(bytes / 4)) + " ".repeat(bytes % 4);
+    return name + "界".repeat(Math.floor(bytes / 3)) + " ".repeat(bytes % 3);
   };
   const input = {
     ...unobserved, bots: bots.map((row, index) => ({ ...row, name: pad(row.name, index) })),
@@ -284,4 +335,27 @@ test("the serialized UTF-8 send_report request fits at the byte limit and trunca
     connectors: connectors.map((row, i) => ({ ...row, name: fullName(i) })) });
   assert.ok(largest.truncated && largest.bots.length > 0 && largest.connectors.length > 0);
   assert.ok(wireBytes(largest, requestId) <= REQUEST_BYTE_LIMIT);
+});
+
+test("the platform tools/call body fits when the client escapes Unicode and spaces JSON separators", () => {
+  const request = (payload: unknown, id: string) => ({ jsonrpc: "2.0", id, method: "tools/call", params: { name: "send_report", arguments: payload } });
+  const asciiBody = (payload: unknown, id: string) => JSON.stringify(request(payload, id), null, 1)
+    .replace(/,\n */gu, ", ").replace(/\n */gu, "").replace(/[^\x20-\x7e]/g, (unit) => "\\u" + unit.charCodeAt(0).toString(16).padStart(4, "0"));
+  const id = "a".repeat(MCP_ENVELOPE_BYTES - asciiBody(null, "").length + 4);
+  const name = (index: number) => `Queue "${index}" 𠀀`.padEnd(18, "界") + "𠀀".repeat(50);
+  const bots = Array.from({ length: 200 }, (_, index) => ({
+    id: `bot-${index}`, name: name(index), usage: null, lastActiveAt: null, routineCount: null,
+  }));
+  const connectors = bots.map((bot) => ({ name: bot.name, status: "ok" }));
+  const payload = report({ ...unobserved, bots, connectors });
+  const { truncated, ...full } = payload;
+  const uncapped = { ...full, bots: bots.map(({ name }) => ({ name, routineCount: null, lastActiveAt: null, usagePeriod: null, usageShare: null, usageShareBelow: null })), connectors };
+  assert.ok(Buffer.byteLength(JSON.stringify(request(uncapped, id))) <= REQUEST_BYTE_LIMIT);
+  assert.ok(asciiBody(uncapped, id).length > RECEIVER_BYTE_LIMIT);
+  assert.equal(truncated, true);
+  assert.deepEqual([payload.counts.bots, payload.counts.connectors.ok], [200, 200]);
+  const body = asciiBody(payload, id);
+  assert.deepEqual(JSON.parse(body), request(payload, id));
+  assert.ok(Buffer.byteLength(body) <= RECEIVER_BYTE_LIMIT);
+  assert.deepEqual(report({ ...unobserved, bots: bots.toReversed(), connectors: connectors.toReversed() }), payload);
 });

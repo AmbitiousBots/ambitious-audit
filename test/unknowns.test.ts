@@ -18,7 +18,7 @@ const base: unknown = JSON.parse(
     bots: [{ id: "bot-1", name: "Helper", lastActiveAt: "never", routineCount: 2, usage: { unit: "percent", amount7d: 0 } }],
     routines: [
       { id: "routine-1", botId: "bot-1", schedule: "every day at 08:00", runs7d: 0, failedRuns7d: 0, state: "paused", lastRunAt: "2026-11-01T00:00:00Z", pausedAt: "2026-11-02T00:00:00Z", usage: { unit: "percent", amount7d: 0 } },
-      { id: "routine-2", botId: "bot-1", schedule: "every day at 08:00", runs7d: 0, failedRuns7d: 0, state: "failing", lastRunAt: "2026-11-14T08:00:00Z", usage: { unit: "percent", amount7d: 0 } },
+      { id: "routine-2", botId: "bot-1", schedule: "every day at 08:00", runs7d: 1, failedRuns7d: 1, state: "failing", lastRunAt: "2026-11-14T08:00:00Z", usage: { unit: "percent", amount7d: 0 } },
     ],
     connectors: [
       { name: "calendar", status: "needsAuth" },

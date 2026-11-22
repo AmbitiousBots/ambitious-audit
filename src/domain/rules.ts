@@ -163,7 +163,7 @@ const botUnused = (bot: CollectorV2Bot, collected: number, days: number): boolea
   if (usage?.unit === "share" && usage.share !== undefined) {
     const interval = shareInterval(usage, collected);
     if (interval !== null) {
-      if (usage.share > 0 && interval.start >= cutoff && interval.start <= interval.end && interval.end <= collected) return false;
+      if (usage.share > 0 && interval.start >= cutoff && interval.start <= Math.min(interval.end, collected)) return false;
       if (!lastActive.known) return usage.share === 0 && usage.period === "last_30_days" && interval.start < cutoff && interval.end >= collected;
     }
   } else if (usage && usage.unit !== "share" && usage.amount7d > 0 && days >= 7) {

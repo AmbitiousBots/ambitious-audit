@@ -1,3 +1,4 @@
+import { addDays, observedInstant } from "./time.ts";
 import type { CollectorInput, SendReportPayload, VisibilityEntry } from "./types.ts";
 
 export const planUsageOf = (snapshot: CollectorInput): SendReportPayload["planUsage"] => {
@@ -28,13 +29,25 @@ export const completeRoutineList = (input: CollectorInput): boolean => {
   return allBotsListed(input) && input.bots.length > 0 && listed.size === 0 && input.bots.every((bot) => bot.routineCount !== null);
 };
 
+export const routineRunCount = (
+  routine: CollectorInput["routines"][number], field: "runs7d" | "failedRuns7d", collected: number,
+): number | null => {
+  const count = routine[field] ?? null;
+  const last = observedInstant(routine.lastRunAt);
+  if (!last.known || count === null) return count;
+  if (last.at === "never" || last.at < addDays(collected, -7)) return count === 0 ? 0 : null;
+  if (last.at > collected || (field === "runs7d" && count === 0)) return null;
+  return count;
+};
+
 const coverage = (
   entry: VisibilityEntry, observed: boolean, complete: boolean,
-  why: { readonly partial: string; readonly unseen: string; readonly complete: string },
+  why: { readonly partial: string; readonly unseen: string },
 ): VisibilityEntry => {
-  const seen = complete ? true : observed ? "partial" : false;
-  if (entry.seen === seen) return entry;
-  return { ...entry, seen, why: complete ? why.complete : observed ? why.partial : why.unseen };
+  if (entry.seen === true && complete) return entry;
+  const seen = observed ? "partial" : false;
+  if (entry.seen !== true) return { ...entry, seen };
+  return { ...entry, seen, why: observed ? why.partial : why.unseen };
 };
 
 const usageCoverage = (input: CollectorInput, entry: VisibilityEntry): VisibilityEntry => {
@@ -54,11 +67,11 @@ const usageCoverage = (input: CollectorInput, entry: VisibilityEntry): Visibilit
       ...(planComplete ? [] : ["Plan readings are incomplete."]),
     ].join(" "),
     unseen: "No bot, routine or plan usage reading was reported.",
-    complete: "Bot shares, routine usage and plan readings were observed.",
   });
 };
 
 export const reportCoverage = (input: CollectorInput, entry: VisibilityEntry): VisibilityEntry => {
+  if (entry.signal === "otherBots" && entry.seen === false && input.bots.some((bot) => bot.id !== input.bots[0]?.id)) return { ...entry, seen: "partial" };
   if (entry.signal === "usage") return usageCoverage(input, entry);
   if (entry.signal === "botActivity") {
     const observed = input.bots.some((bot) => bot.lastActiveAt !== null);
@@ -66,17 +79,17 @@ export const reportCoverage = (input: CollectorInput, entry: VisibilityEntry): V
     return coverage(entry, observed, complete, {
       partial: "Activity was reported for part of the bot inventory.",
       unseen: "No bot activity reading was reported.",
-      complete: "Activity was observed for the full bot inventory.",
     });
   }
   if (entry.signal === "routines") {
     const observed = input.routines.length > 0 || input.bots.some((bot) => bot.routineCount !== null);
+    const collected = Date.parse(input.collectedAt);
     const complete = completeRoutineList(input) && input.bots.every((bot) => bot.routineCount !== null) &&
-      input.routines.every((routine) => routine.lastRunAt !== null && routine.runs7d != null && routine.failedRuns7d != null);
+      input.routines.every((routine) => routine.lastRunAt !== null &&
+        routineRunCount(routine, "runs7d", collected) !== null && routineRunCount(routine, "failedRuns7d", collected) !== null);
     return coverage(entry, observed, complete, {
       partial: "The routine inventory or its run history is incomplete.",
       unseen: "No routine inventory or run history was reported.",
-      complete: "Routine inventory and run history were observed.",
     });
   }
   if (entry.signal === "tasks" || entry.signal === "pages") {
@@ -86,7 +99,6 @@ export const reportCoverage = (input: CollectorInput, entry: VisibilityEntry): V
     return coverage(entry, counts.some((count) => count != null), counts.every((count) => count != null), {
       partial: `Some ${label} counts were unavailable.`,
       unseen: `No ${label} counts were reported.`,
-      complete: `All ${label} counts were reported.`,
     });
   }
   return entry;
