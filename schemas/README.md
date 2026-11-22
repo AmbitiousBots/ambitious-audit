@@ -25,7 +25,7 @@ What the schemas hold to, and `npm run check:schemas` checks:
 - **Priorities and service announcements.** Version 3 requires `high` or `low` on every finding and recommendation, plus an announcements array with at most ten `{ id, priority, title }` objects. Announcement ids are 1 to 64 lowercase letters, digits or hyphens, starting with a letter or digit; titles are 1 to 120 characters. The module copies these values from the saved service input without writing announcement text.
 - **A complete visibility map.** `visibility` has exactly one entry for each signal (nine in the collector document and reports from version 2 onward, four in the version 1 report), each saying whether it was seen and why, so something the bot could not see is never left out.
 - **Observation gaps.** Collector v2 and report v4 accept `"partial"` for a signal with incomplete coverage. Missing task and page counts are nullable from v2 onward. In v4 the three routine state totals and both seven-day run totals can also be null.
-- **Display names.** Collect bot and connector display names from the account. During report construction, a name, evidence source, evidence text or visibility explanation that matches the privacy filter becomes `[redacted]`. Evidence matching uses the original source before redaction.
+- **Display names.** Collect bot and connector display names from the account. During report construction, a name, evidence source, evidence text or visibility explanation that matches the privacy filter becomes `[redacted]`. Evidence matching uses the original source before redaction. The filter checks NFKC-normalized text for credential assignments, authorization schemes followed by credential-shaped values, and seven digits within a 40-character span of digits and phone separators. This includes date-shaped numbers in free text.
 - **Report and feedback ids are version 7 UUIDs**, lower case.
 - **Times are UTC**, written `YYYY-MM-DDTHH:MM:SSZ` with optional milliseconds.
 
@@ -43,9 +43,16 @@ Collector v1 uses `if`, `then` and `else` to distinguish seven-day amounts from 
 
 ## Serialized report size
 
-The producer budgets 131,072 bytes for a compact UTF-8 MCP `tools/call` request. The [module contract](https://github.com/AmbitiousBots/ambitious-kit/blob/kit-v0.2.6/MODULE_CONTRACT.md) and [service guide](https://ambitiousbots.com/guides/getting-started) give no receiver byte limit. This budget allows 1,024 bytes for the JSON-RPC envelope and 130,048 bytes for the serialized `send_report` arguments, including JSON escaping and punctuation.
+The kit serializes the CLI result as compact UTF-8 JSON. The snapshot routine passes the parsed `data.payload` object to the platform’s `send_report` MCP tool. The platform encodes the HTTP request. [Snapshot routine](../skills/snapshot-routine/SKILL.md)
 
-If the full payload exceeds 130,048 bytes, the producer adds `truncated: true` and retains prefixes of both lists, alternating bots sorted by id and connectors sorted by name. Counts cover every row in the snapshot. Findings, recommendations and their evidence retain their space. The evidence budget is 30 rows. Each item with evidence gets one citation before the producer fills the remaining rows in rank order and removes citations to omitted rows.
+The producer sizes the JSON-RPC `tools/call` body in two encodings and reserves 1,024 bytes in each for the envelope.
+
+| Encoding | Request limit | Space for arguments |
+|---|---:|---:|
+| Compact UTF-8 JSON | 131,072 bytes | 130,048 bytes |
+| JSON with ASCII Unicode escapes | 262,144 bytes (receiver limit) | 261,120 bytes |
+
+The escaped bound allows six bytes per non-ASCII UTF-16 code unit, including twelve for a surrogate pair, and one space after each comma and colon. If either budget is exceeded, the producer adds `truncated: true` and retains prefixes of both lists, alternating bots sorted by id and connectors sorted by name. Counts cover every row in the snapshot. Findings, recommendations and their evidence retain their space. The evidence budget is 30 rows. Each item with evidence gets one citation before the producer fills the remaining rows in rank order and removes citations to omitted rows.
 
 ## Examples
 
