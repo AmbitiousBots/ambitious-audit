@@ -170,6 +170,8 @@ Detail such as the states in a refused transition is in `data`, not in the error
 
 ## Moving from 0.3.0 to 0.4.0
 
+Deploy the receiving service’s `send_report` v4 support before any kit pins ambitious-audit 0.4.0. In the service PR, run the receiver’s acceptance check against the producer’s weekly v4 payload. The producer build exports it to `dist/weekly-report.v4.json`, and `npm run verify` compares it with the output of `report build`. Service CI can also read the fixture from its pinned producer revision. [Weekly v4 payload](schemas/examples/send_report.v4/valid/weekly-activity.json)
+
 Use collector v2 for new readings. Existing collector v1 inputs keep their snapshot ids with the same seed and time. New reports use v4. Rebuilding a stored v1, v2 or v3 report id returns its original payload. The database schema and delivery states are unchanged.
 
 ## Earlier changes: 0.2.2 to 0.3.0

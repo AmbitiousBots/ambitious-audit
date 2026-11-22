@@ -13,7 +13,7 @@ Show each announcement's title verbatim and keep its id with the item. Announcem
 
 When `accountKind` is `unknown` (or `mode` is `partial` in the analysis commands), say near the top that the bot does not know its role on the account, so advice that depends on the role is held back. Show each finding marked `withheld` as a fact, without advice, and say that telling the bot the role lets the next audit give that advice. Do not guess the role. Recommendations the module did return in partial mode are shown as usual: advice about the bot's own connectors, such as signing one in again, does not depend on the role.
 
-For a v4 report, show bot and connector names as recorded. Show exact shares and strict upper bounds with their periods, plan readings with their observation time, and the reported activity totals. Display a bound of 0.01 as <1%.
+For a v4 report, show bot and connector names as recorded. Show exact shares and strict upper bounds with their periods, plan readings with their observation time, and the reported activity totals. Include each supplied share start or end date. Display a bound of 0.01 as <1%. When `truncated` is true, tell the reader that the displayed inventory is shortened and the totals include omitted rows.
 
 List each visibility entry marked false or `"partial"` with its `why`. The findings of kind `visibility` name the same gaps and have low priority; list each gap once.
 

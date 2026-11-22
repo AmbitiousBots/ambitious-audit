@@ -158,6 +158,6 @@ const v4 = run(["report", "build"], JSON.stringify({ snapshotId: v2.snapshotId, 
 verifyPayload(v4.payload);
 assert.equal(v4.payload.planUsage.extraCreditsLeftUsd, 0.29);
 assert.equal(isReportPayload({ ...v4.payload, planUsage: { ...v4.payload.planUsage, extraCreditsLeftUsd: 0.291 } }), false);
-assert.deepEqual(v4.payload, JSON.parse(readFileSync(join(root, "schemas/examples/send_report.v4/valid/weekly-activity.json"), "utf8")));
+assert.deepEqual(v4.payload, JSON.parse(readFileSync(join(root, "dist/weekly-report.v4.json"), "utf8")));
 assert.deepEqual(run(["schema", "send", "report"]).schema.$id, "urn:ambitious:audit:schema:send_report:v4");
 process.stdout.write(`verify/audit: ok. report ${built.reportId}, ${recommendations.length} recommendation(s)\n`);
