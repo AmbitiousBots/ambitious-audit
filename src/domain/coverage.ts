@@ -33,7 +33,8 @@ const visibility = (entry: CollectorVisibility, seen: VisibilityEntry["seen"], s
 });
 
 const botInventory = (input: CollectorInput): "complete" | "incomplete" | "unconfirmed" => {
-  const otherCount = input.usageOther?.botCount ?? 0;
+  const { usageOther } = input;
+  const otherCount = usageOther?.botCount ?? (usageOther && usageOther.share > 0 ? 1 : 0);
   if (otherCount > 0) {
     const others = input.bots.filter((bot) => bot.usage === null);
     if (otherCount > others.length || others.some((bot) => bot.routineCount === null)) return "incomplete";

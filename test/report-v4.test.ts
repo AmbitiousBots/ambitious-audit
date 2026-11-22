@@ -366,6 +366,8 @@ test("aggregate bots need listed routine counts before the inventory can be comp
   const visibility = weekly.visibility.map((entry) => entry.signal === "routines" ? { ...entry, seen: "partial", scope: "shared_only" } : entry);
   const base = { ...weekly, visibility, routines: [], usageOther: { share: 0.2, botCount: 1 } };
   for (const input of [
+    { ...base, bots: [named], usageOther: { share: 0.2 } },
+    { ...base, bots: [named, { ...other, routineCount: null }], usageOther: { share: 0.2 } },
     { ...base, bots: [named], usageOther: { share: 0.2, botCount: 3 } },
     { ...base, bots: [named], visibility: weekly.visibility },
     { ...base, bots: [named, { ...other, routineCount: null }] },
@@ -375,9 +377,15 @@ test("aggregate bots need listed routine counts before the inventory can be comp
     for (const signal of ["otherBots", "routines"]) assert.equal(payload.visibility.find((entry) => entry.signal === signal)?.seen, "partial");
     assert.match(payload.visibility.find((entry) => entry.signal === "otherBots")?.why ?? "", /Missing full bot inventory/u);
   }
-  const accounted = report({ ...base, bots: [named, other] });
-  assert.equal(accounted.visibility.find((entry) => entry.signal === "otherBots")?.seen, true);
-  assert.deepEqual(accounted.counts.routines, { active: 0, paused: 0, failing: 0, runs7d: 0, failedRuns7d: 0 });
+  for (const input of [
+    { ...base, bots: [named, other] },
+    { ...base, bots: [named, other], usageOther: { share: 0.2 } },
+    { ...base, bots: [{ ...named, usage: { ...named.usage, share: 1 } }], usageOther: { share: 0 } },
+  ]) {
+    const accounted = report(input);
+    assert.equal(accounted.visibility.find((entry) => entry.signal === "otherBots")?.seen, true);
+    assert.deepEqual(accounted.counts.routines, { active: 0, paused: 0, failing: 0, runs7d: 0, failedRuns7d: 0 });
+  }
 });
 
 test("a routine owned by an unlisted bot makes both inventories partial", () => {
