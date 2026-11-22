@@ -5,7 +5,7 @@ description: "Gather a version 2 audit snapshot from account tools and record wh
 
 # Audit collector
 
-Run `ambitious-audit schema` for the collector schema. Set `schemaVersion` to 2 and `collectedAt` to the observation time in UTC. Copy bot and connector display names as the account shows them. These names appear in the report. Keep tokens, credentials and conversation transcripts out of every field. Read only data the account tools expose to this bot.
+Run `ambitious-audit schema` for the collector schema. Set `schemaVersion` to 2 and `collectedAt` to the observation time in UTC. Copy bot and connector display names as the account shows them. The report checks each name and supplies a numbered label if it is withheld. Keep tokens, credentials and conversation transcripts out of every field. Read only data the account tools expose to this bot.
 
 ## Usage
 
@@ -31,6 +31,6 @@ If the tool gives exact shares for some bots and bounds for others, or omits rou
 
 Include one visibility entry for each of `transcripts`, `usage`, `otherBots`, `auditLog`, `accountRole`, `tasks`, `pages`, `botActivity` and `routines`. Set `seen` to true for complete coverage, false for no observation or `"partial"` for incomplete coverage. Describe the source or gap in `why`. Each null needs a false or partial entry for its signal. Plan readings belong to `usage`, last-active times to `botActivity`, and routine inventory and run counts to `routines`. If no routine tool was available, use an empty list and state that the inventory was unavailable.
 
-Use evidence ids such as `ev-1`. Give a short observation of at most 280 characters. Set `source` to the relevant bot id, routine id, connector name or `tasks`. Include an evidence line for each connector that needs a sign-in or grant and for low-share readings that support a recommendation.
+Use evidence ids such as `ev-1`. Give a short observation of at most 200 characters for the report. Set `source` to the relevant bot id, routine id, connector name or `tasks`. Copy the exact case of each bot id. Include an evidence line for each connector that needs a sign-in or grant and for low-share readings that support a recommendation.
 
 Write the collector document outside the bot’s private data directory and pass it to `snapshot --in`. Validation errors identify the field and rule.
