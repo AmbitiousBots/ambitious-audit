@@ -32,23 +32,31 @@ const visibility = (entry: CollectorVisibility, seen: VisibilityEntry["seen"], s
   signal: entry.signal, seen, why: entry.scope ? `${statement} ${scopeText[entry.scope]}` : statement,
 });
 
-const allBotsListed = (input: CollectorInput): boolean =>
-  input.visibility.some((entry) => entry.signal === "otherBots" && entry.seen === true && !restricted(entry));
+const botInventory = (input: CollectorInput): "complete" | "incomplete" | "unconfirmed" => {
+  const otherCount = input.usageOther?.botCount ?? 0;
+  if (otherCount > 0) {
+    const others = input.bots.filter((bot) => bot.usage === null);
+    if (otherCount > others.length || others.some((bot) => bot.routineCount === null)) return "incomplete";
+  }
+  const ids = new Set(input.bots.map((bot) => bot.id));
+  if (input.routines.some((routine) => !ids.has(routine.botId))) return "incomplete";
+  const entry = input.visibility.find((entry) => entry.signal === "otherBots");
+  return entry?.seen === true && !restricted(entry) ? "complete" : "unconfirmed";
+};
 
-export const completeRoutineList = (input: CollectorInput): boolean => {
+export const completeRoutineList = (input: CollectorInput, inventory = botInventory(input)): boolean => {
+  if (inventory === "incomplete") return false;
   const listed = new Map<string, number>();
   for (const routine of input.routines) listed.set(routine.botId, (listed.get(routine.botId) ?? 0) + 1);
   for (const bot of input.bots) {
     if (bot.routineCount !== null && bot.routineCount !== (listed.get(bot.id) ?? 0)) return false;
-    listed.delete(bot.id);
   }
 
   const entry = input.visibility.find((item) => item.signal === "routines");
   const seen = entry?.seen;
-  if (listed.size > 0 && allBotsListed(input)) return false;
   if (entry && seen === true && !restricted(entry)) return true;
   if (seen === false && input.routines.length === 0) return false;
-  return allBotsListed(input) && input.bots.length > 0 && listed.size === 0 && input.bots.every((bot) => bot.routineCount !== null);
+  return inventory === "complete" && input.bots.length > 0 && input.bots.every((bot) => bot.routineCount !== null);
 };
 
 export const routineRunCount = (
@@ -89,8 +97,9 @@ const usageCoverage = (input: CollectorInput, entry: CollectorVisibility): Visib
   const routineObserved = input.routines.some((routine) => routine.usage !== null);
   const exactShare = ({ usage }: CollectorInput["bots"][number]) =>
     usage?.unit === "percent" || (usage?.unit === "share" && usage.share !== undefined);
-  const botsComplete = !input.usageOther && allBotsListed(input) && input.bots.every(exactShare);
-  const routinesComplete = completeRoutineList(input) && input.routines.every((routine) => routine.usage !== null);
+  const inventory = botInventory(input);
+  const botsComplete = !input.usageOther && inventory === "complete" && input.bots.every(exactShare);
+  const routinesComplete = completeRoutineList(input, inventory) && input.routines.every((routine) => routine.usage !== null);
   return coverage(entry, planObserved || input.usageOther !== undefined || botObserved || routineObserved, botsComplete && routinesComplete && planComplete, [
     measure("exact shares", input.bots.some(exactShare), botsComplete), measure("routine usage", routineObserved, routinesComplete),
     ...(input.bots.some(({ usage }) => usage?.unit === "share" && usage.shareBelow !== undefined) ? [measure("bounds", true)] : []),
@@ -105,12 +114,13 @@ const inventoryMeasure = <T>(label: string, rows: readonly T[], present: (row: T
   measure(label, rows.some(present), listed && rows.every(present));
 
 export const reportCoverage = (input: CollectorInput, entry: CollectorVisibility): VisibilityEntry => {
-  if (entry.signal === "otherBots" && (input.bots.length > 1 || input.usageOther !== undefined || entry.seen !== false)) {
-    const listed = allBotsListed(input);
-    return coverage(entry, true, listed, [
+  if (entry.signal === "otherBots") {
+    const inventory = botInventory(input);
+    const observed = input.bots.length > 1 || input.usageOther !== undefined || entry.seen !== false || inventory === "incomplete";
+    if (observed) return coverage(entry, true, inventory === "complete", [
       ...(input.bots.length > 0 ? [measure("listed bots", true)] : []),
       ...(input.usageOther ? [measure("combined other-bot share", true)] : []),
-      measure("full bot inventory", listed),
+      measure("full bot inventory", inventory === "complete"),
     ]);
   }
   if (entry.signal === "accountRole") {
@@ -119,20 +129,21 @@ export const reportCoverage = (input: CollectorInput, entry: CollectorVisibility
   }
   if (entry.signal === "usage") return usageCoverage(input, entry);
   if (entry.signal === "botActivity") {
-    const activity = inventoryMeasure("last activity", input.bots, (bot) => bot.lastActiveAt !== null, allBotsListed(input));
+    const activity = inventoryMeasure("last activity", input.bots, (bot) => bot.lastActiveAt !== null, botInventory(input) === "complete");
     return coverage(entry, activity.observed, activity.complete, [activity]);
   }
   if (entry.signal === "routines") {
-    const listed = completeRoutineList(input);
+    const inventory = botInventory(input);
+    const listed = completeRoutineList(input, inventory);
     const collected = Date.parse(input.collectedAt);
     const measures = [
       measure("routine inventory", input.routines.length > 0, listed),
-      inventoryMeasure("routine counts", input.bots, (bot) => bot.routineCount !== null, true),
+      inventoryMeasure("routine counts", input.bots, (bot) => bot.routineCount !== null, inventory !== "incomplete"),
       inventoryMeasure("last runs", input.routines, (row) => row.lastRunAt !== null, listed),
       inventoryMeasure("weekly runs", input.routines, (row) => routineRunCount(row, "runs7d", collected) !== null, listed),
       inventoryMeasure("weekly failures", input.routines, (row) => routineRunCount(row, "failedRuns7d", collected) !== null, listed),
     ];
-    return coverage(entry, measures.some((item) => item.observed), measures.every((item) => item.complete), measures);
+    return coverage(entry, inventory === "incomplete" || measures.some((item) => item.observed), measures.every((item) => item.complete), measures);
   }
   if (entry.signal === "tasks" || entry.signal === "pages") {
     const { open, stale7d, blocked, closed7d } = input.tasks;

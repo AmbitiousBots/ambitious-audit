@@ -175,20 +175,23 @@ const branded = <T extends string>(value: string, accept: (raw: string) => raw i
 };
 
 test("cited recommendation evidence stays in the report when the evidence list is cut to 30", () => {
-  const evidence = Array.from({ length: 40 }, (_, index) => ({
+  const bots = Array.from({ length: 40 }, (_, index) => ({
+    id: `bot-${index + 1}`, name: "Queue", lastActiveAt: "never", usage: null, routineCount: 0,
+  }));
+  const evidence = bots.map((bot, index) => ({
     id: `ev-${index + 1}`,
     kind: "count" as const,
     text: `Row ${index + 1}.`,
-    sourceKind: "bot", source: "bot-1",
+    sourceKind: "bot", source: bot.id,
   }));
-  const snapshot = snapshotFor({ name: "many", expect: "hit", bots: [{ id: "bot-1", name: "Queue", lastActiveAt: "never", usage: null, routineCount: 0 }] });
+  const snapshot = snapshotFor({ name: "many", expect: "hit", bots });
   const full = parseCollector({ ...snapshot, evidence });
   const ids = (from: number, count: number): EvidenceId[] =>
     Array.from({ length: count }, (_, index) => branded(`ev-${from + index}`, isEvidenceId, "evidence id"));
   const base = parseRule(botUnused);
   const ruleHit = (id: string, rank: number, evidenceIds: EvidenceId[]): RuleHit => ({
     rule: { ...base, id: branded(id, isRuleId, "rule id"), rank },
-    subjects: ["bot-1"],
+    subjects: evidenceIds.map((id) => id.replace("ev-", "bot-")),
     withheld: false,
     evidenceIds,
     summary: "One bot has not been used.",

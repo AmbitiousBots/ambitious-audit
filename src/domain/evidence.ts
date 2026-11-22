@@ -1,4 +1,5 @@
 import { isEvidenceId, type CollectorInput, type EvidenceId } from "./types.ts";
+import type { CollectorV2BotUsage } from "./wire.generated.ts";
 
 export type SourceKind = NonNullable<CollectorInput["evidence"][number]["sourceKind"]>;
 
@@ -11,10 +12,18 @@ type Subject = {
 
 const periods = { this_week: "this week", last_7_days: "the last 7 days", last_30_days: "the last 30 days" };
 
+const measuredPeriod = (usage: Extract<CollectorV2BotUsage, { unit: "share" }>): string => {
+  const { periodStart, periodEnd } = usage;
+  if (periodStart && periodEnd) return `the period from ${periodStart} to ${periodEnd}`;
+  if (periodStart) return `the period starting ${periodStart}`;
+  if (periodEnd) return `the period ending ${periodEnd}`;
+  return periods[usage.period];
+};
+
 const botReading = ({ lastActiveAt, usage }: CollectorInput["bots"][number]): string => {
   const statements = [];
   if (usage?.unit === "share") {
-    const period = periods[usage.period];
+    const period = measuredPeriod(usage);
     if (usage.share === 0) statements.push(`The bot had zero usage over ${period}.`);
     else if ((usage.shareBelow ?? 1) <= 0.01 || (usage.share ?? 1) < 0.01) statements.push(`The bot accounted for less than 1% of usage over ${period}.`);
     else statements.push(`The usage report recorded ${usage.share === undefined ? "an upper bound" : "an exact share"} for ${period}.`);

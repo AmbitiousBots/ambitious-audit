@@ -9,7 +9,7 @@ import { canonicalJson } from "../src/domain/canonical.ts";
 import { MCP_ENVELOPE_BYTES, RECEIVER_BYTE_LIMIT, REQUEST_BYTE_LIMIT } from "../src/domain/report-size.ts";
 import type { CollectorV2BotUsage } from "../src/domain/wire.generated.ts";
 import { parseCollector } from "../src/domain/input.ts";
-import { assembleReport } from "../src/domain/report.ts";
+import { assembleReport, findingsFrom, recommendationsFrom } from "../src/domain/report.ts";
 import { isReportPayload } from "../src/domain/schema.ts";
 import { RULES } from "../src/domain/rule-pack.ts";
 import { evaluateRules } from "../src/domain/rules.ts";
@@ -90,6 +90,24 @@ test("bot rows retain each supplied share boundary for both exact shares and bou
     const finding = payload.findings.find((item) => item.ruleId === "bots-barely-used");
     if (dates.periodStart?.startsWith("2026-10")) assert.equal(finding, undefined);
     else assert.match(finding?.summary ?? "", /measured period/);
+  }
+});
+
+test("cited bot observations describe the supplied usage interval", () => {
+  const periodStart = "2026-10-01T00:00:00Z";
+  const periodEnd = "2026-10-08T00:00:00Z";
+  for (const dates of [{ periodStart, periodEnd }, { periodStart }, { periodEnd }]) {
+    for (const reading of [{ share: 0.004 }, { shareBelow: 0.01 }, { share: 0 }, { share: 0.3 }]) {
+      const bots = [{ id: "queue", name: "Work queue", lastActiveAt: "never", routineCount: 0,
+        usage: { unit: "share", period: "last_7_days", ...reading, ...dates } }];
+      const evidence = [{ id: "ev-24", kind: "count", sourceKind: "bot", source: "queue" }];
+      const payload = report({ ...weekly, bots, routines: [], evidence });
+      const observation = payload.evidence[0];
+      assert.ok(observation);
+      assert.deepEqual(payload.findings.find((item) => item.ruleId === "bot-unused")?.evidenceIds, [observation.id]);
+      for (const boundary of Object.values(dates)) assert.ok(observation.text.includes(boundary), observation.text);
+      assert.doesNotMatch(observation.text, /last 7 days/u);
+    }
   }
 });
 
@@ -337,14 +355,49 @@ test("known per-bot counts override a claimed complete routine inventory", () =>
   }
 });
 
+test("aggregate bots need listed routine counts before the inventory can be complete", () => {
+  const named = { id: "named", name: "Queue", routineCount: 0, lastActiveAt: "never",
+    usage: { unit: "share", period: "last_7_days", share: 0.8 } };
+  const other = { ...named, id: "other", usage: null };
+  const visibility = weekly.visibility.map((entry) => entry.signal === "routines" ? { ...entry, seen: "partial", scope: "shared_only" } : entry);
+  const base = { ...weekly, visibility, routines: [], usageOther: { share: 0.2, botCount: 1 } };
+  for (const input of [
+    { ...base, bots: [named], usageOther: { share: 0.2, botCount: 3 } },
+    { ...base, bots: [named], visibility: weekly.visibility },
+    { ...base, bots: [named, { ...other, routineCount: null }] },
+  ]) {
+    const payload = report(input);
+    assert.deepEqual(payload.counts.routines, { active: null, paused: null, failing: null, runs7d: null, failedRuns7d: null });
+    for (const signal of ["otherBots", "routines"]) assert.equal(payload.visibility.find((entry) => entry.signal === signal)?.seen, "partial");
+    assert.match(payload.visibility.find((entry) => entry.signal === "otherBots")?.why ?? "", /Missing full bot inventory/u);
+  }
+  const accounted = report({ ...base, bots: [named, other] });
+  assert.equal(accounted.visibility.find((entry) => entry.signal === "otherBots")?.seen, true);
+  assert.deepEqual(accounted.counts.routines, { active: 0, paused: 0, failing: 0, runs7d: 0, failedRuns7d: 0 });
+});
+
+test("a routine owned by an unlisted bot makes both inventories partial", () => {
+  const bots = weekly.bots.slice(0, 1).map((bot) => ({ ...bot, routineCount: 0 }));
+  const routines = weekly.routines.map((routine) => ({ ...routine, botId: "unlisted" }));
+  for (const seen of [true, false]) {
+    const visibility = weekly.visibility.map((entry) => entry.signal === "otherBots" ? { ...entry, seen } : entry);
+    const payload = report({ ...weekly, bots, routines, visibility });
+    assert.deepEqual(payload.counts.routines, { active: null, paused: null, failing: null, runs7d: null, failedRuns7d: null });
+    for (const signal of ["otherBots", "routines"]) assert.equal(payload.visibility.find((entry) => entry.signal === signal)?.seen, "partial");
+  }
+});
+
 test("all findings and recommendations retain evidence when four rules compete for 30 rows", () => {
-  const bots = weekly.bots.slice(0, 3).map((bot) => ({ ...bot, usage: { unit: "share", period: "last_7_days", shareBelow: 0.01 } }));
-  const connectors = [{ name: "Connector 1", status: "needsAuth" }, { name: "Connector 2", status: "needsGrant" }];
-  const sources = ["Connector 1", "Connector 2", "routine-1", "bot-1"];
-  const evidence = sources.flatMap((source, group) => Array.from({ length: 10 }, (_, index) => ({
-    source, sourceKind: ["connector", "connector", "routine", "bot"][group], id: `ev-${group * 10 + index + 1}`, kind: "count", text: `Observation ${index + 1}`,
-  })));
-  const payload = report({ ...weekly, bots, connectors, evidence, routines: weekly.routines.map((row) => ({ ...row, state: "failing" })) });
+  const bots = Array.from({ length: 10 }, (_, i) => ({ id: `bot-${i}`, name: "Work queue", routineCount: 1, lastActiveAt: null,
+    usage: { unit: "share", period: "last_7_days", shareBelow: 0.01 } }));
+  const routines = bots.map((bot, i) => ({ ...weekly.routines[0], id: `routine-${i}`, botId: bot.id, state: "failing" }));
+  const connectors = ["needsAuth", "needsGrant"].flatMap((status) => bots.map((_, i) => ({ name: `${status} ${i}`, status })));
+  const evidence = [
+    ...bots.map(({ id }) => ({ source: id, sourceKind: "bot" })),
+    ...routines.map(({ id }) => ({ source: id, sourceKind: "routine" })),
+    ...connectors.map(({ name }) => ({ source: name, sourceKind: "connector" })),
+  ].map((row, i) => ({ ...row, id: `ev-${i + 1}`, kind: "count" }));
+  const payload = report({ ...weekly, bots, connectors, evidence, routines });
   const kept = new Set(payload.evidence.map((row) => row.id));
   assert.equal(kept.size, 30);
   assert.equal(payload.recommendations.length, 3);
@@ -413,6 +466,23 @@ test("the low-usage recommendation requires evidence for an exact qualifying bot
   assert.equal(right?.id, "bots-barely-used");
   assert.deepEqual(right.evidenceIds, ["ev-1"]);
   assert.equal(right.why, "Check whether the measured usage is expected for each bot's work.");
+});
+
+test("repeated local evidence for one bot leaves a citation for each qualifying bot", () => {
+  const bots = weekly.bots.slice(0, 3).map((bot) => ({ ...bot, usage: { unit: "share", period: "last_7_days", shareBelow: 0.01 } }));
+  const evidence = bots.flatMap((bot, i) => Array.from({ length: i === 0 ? 10 : 1 }, (_, j) => ({
+    id: `ev-${100 + i * 10 + j}`, kind: "count", sourceKind: "bot", source: bot.id,
+  })));
+  const snapshot = parseCollector({ ...weekly, bots, evidence });
+  const hits = evaluateRules(snapshot, RULES);
+  const localIds = evidence.slice(0, 10).map((row) => row.id);
+  assert.deepEqual(findingsFrom(snapshot, hits).find((item) => item.ruleId === "bots-barely-used")?.evidenceIds, localIds);
+  assert.deepEqual(recommendationsFrom(hits, new Set()).find((item) => item.recommendation.id === "bots-barely-used")?.recommendation.evidenceIds, localIds);
+  const payload = report(snapshot);
+  assert.deepEqual(payload.evidence.map((row) => row.source), ["Bot 1", "Bot 2", "Bot 3"]);
+  const ids = payload.evidence.map((row) => row.id);
+  assert.deepEqual(payload.recommendations.find((item) => item.id === "bots-barely-used")?.evidenceIds, ids);
+  assert.deepEqual(payload.findings.find((item) => item.ruleId === "bots-barely-used")?.evidenceIds, ids);
 });
 
 test("a bot named tasks and task counts can only cite evidence of their own kind", () => {

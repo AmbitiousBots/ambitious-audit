@@ -133,7 +133,7 @@
     {
       "id": "ev-1",
       "source": "Bot 3",
-      "text": "The bot accounted for less than 1% of usage over the last 7 days."
+      "text": "The bot accounted for less than 1% of usage over the period from 2026-11-08T00:00:00Z to 2026-11-15T00:00:00Z."
     }
   ],
   "findings": [

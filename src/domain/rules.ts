@@ -108,7 +108,7 @@ const referenceMs = (snapshot: CollectorInput): number => {
 
 const evidenceFor = (evidence: ReturnType<typeof evidenceSubjects>, kind: SourceKind, subjects: readonly string[]): EvidenceId[] => {
   const wanted = new Set(subjects);
-  return [...evidence].filter(([, subject]) => subject.kind === kind && wanted.has(subject.key)).slice(0, 10).map(([id]) => id);
+  return [...evidence].filter(([, subject]) => subject.kind === kind && wanted.has(subject.key)).map(([id]) => id);
 };
 
 const sentence = (summary: CountText, count: number): string => (count === 1 ? summary.one : summary.many.replaceAll("{count}", String(count)));

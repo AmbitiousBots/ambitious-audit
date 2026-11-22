@@ -28,6 +28,7 @@ import { isEvidenceId, isRecommendationId, isRuleId, isSemVer, WIRE_LIMITS } fro
 import { entropyHex, reportIdFrom } from "./uuid.ts";
 
 const SEVERITY_ORDER = { high: 0, medium: 1, low: 2 } as const;
+const CITATIONS_PER_RULE = 10;
 
 const priorityOf = (severity: Severity): Priority => severity === "high" ? "high" : "low";
 
@@ -85,7 +86,7 @@ export const ruleFinding = (item: RuleHit): Finding => ({
   ruleId: item.rule.id,
   severity: item.rule.severity,
   priority: priorityOf(item.rule.severity),
-  evidenceIds: item.evidenceIds,
+  evidenceIds: item.evidenceIds.slice(0, CITATIONS_PER_RULE),
   summary: item.summary,
   ...(item.withheld ? { withheld: "roleUnknown" as const } : {}),
 });
@@ -114,7 +115,7 @@ export const recommendationsFrom = (hits: readonly RuleHit[], suppressed: Readon
   const ranked: RankedRecommendation[] = [];
   for (const item of orderedHits(hits)) {
     if (item.withheld || suppressed.has(item.fingerprint)) continue;
-    const evidenceIds = cited(item.evidenceIds);
+    const evidenceIds = cited(item.evidenceIds.slice(0, CITATIONS_PER_RULE));
     if (evidenceIds === null || !isRecommendationId(item.rule.id)) continue;
     ranked.push({
       fingerprint: item.fingerprint,
@@ -141,11 +142,26 @@ const summaryOf = (findings: readonly Finding[], visibility: VisibilityMap, with
   return summary.length <= WIRE_LIMITS.summaryCharacters ? summary : `${summary.slice(0, WIRE_LIMITS.summaryCharacters - 1)}…`;
 };
 
-const allocateEvidence = (snapshot: CollectorInput, findings: readonly Finding[], ranked: readonly RankedRecommendation[]) => {
+const allocateEvidence = (snapshot: CollectorInput, hits: readonly RuleHit[], findings: readonly Finding[], ranked: readonly RankedRecommendation[]) => {
   const available = evidenceSubjects(snapshot);
+  const firstBySubject = new Map<string, EvidenceId>();
+  const citations = new Map<string, EvidenceId[]>();
+  for (const hit of hits) {
+    const ids = new Set<EvidenceId>();
+    for (const id of hit.evidenceIds) {
+      const subject = available.get(id);
+      if (!subject) continue;
+      const first = firstBySubject.get(subject.source) ?? id;
+      firstBySubject.set(subject.source, first);
+      ids.add(first);
+      if (ids.size === CITATIONS_PER_RULE) break;
+    }
+    citations.set(hit.rule.id, [...ids]);
+  }
+  const idsFor = (item: Finding | Recommendation) => citations.get("ruleId" in item ? item.ruleId : item.id) ?? [];
   const selected = new Set<EvidenceId>();
   const items = [...ranked.map((item) => item.recommendation), ...findings];
-  const references = items.map((item) => item.evidenceIds.filter((id) => available.has(id)));
+  const references = items.map(idsFor);
   // WHY: Reserve one row per cited item before filling the remaining slots in rank order.
   for (const ids of references) {
     const first = ids[0];
@@ -166,13 +182,13 @@ const allocateEvidence = (snapshot: CollectorInput, findings: readonly Finding[]
     reportIds.set(localId, id);
     evidence.push({ id, source: subject.source, text: subject.text });
   }
-  const retained = (ids: readonly EvidenceId[]) => ids.flatMap((id) => reportIds.get(id) ?? []);
+  const retained = (item: Finding | Recommendation) => idsFor(item).flatMap((id) => reportIds.get(id) ?? []);
   const recommendations = ranked.flatMap((local) => {
-    const evidenceIds = cited(retained(local.recommendation.evidenceIds));
+    const evidenceIds = cited(retained(local.recommendation));
     return evidenceIds ? [{ local, report: { ...local.recommendation, evidenceIds } }] : [];
   });
   return {
-    findings: findings.map((finding) => ({ ...finding, evidenceIds: retained(finding.evidenceIds) })),
+    findings: findings.map((finding) => ({ ...finding, evidenceIds: retained(finding) })),
     ranked: recommendations.map((item) => item.local),
     recommendations: capRecommendations(recommendations.map((item) => item.report)),
     evidence,
@@ -250,7 +266,7 @@ export const assembleReport = (
   const collected = parseTimestamp(snapshot.collectedAt);
   if (collected === null) throw new Error("The snapshot collectedAt is not a UTC timestamp.");
   const visibility = visibilityOf(snapshot);
-  const { findings, ranked, evidence, recommendations } = allocateEvidence(snapshot, findingsFrom(snapshot, hits, visibility), recommendationsFrom(hits, suppressed));
+  const { findings, ranked, evidence, recommendations } = allocateEvidence(snapshot, hits, findingsFrom(snapshot, hits, visibility), recommendationsFrom(hits, suppressed));
   const payload = fitReportLists({
     schemaVersion: 4,
     reportId,
