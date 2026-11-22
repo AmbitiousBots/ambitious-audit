@@ -1,5 +1,5 @@
 import { isRecord } from "@ambitious/kit/domain/json";
-import { observedInstant, olderThanDays, parseTimestamp, withinDays } from "./time.ts";
+import { addDays, observedInstant, olderThanDays, parseTimestamp, withinDays } from "./time.ts";
 import type { CollectorInput, Effort, EvidenceId, EvidenceIds, Fingerprint, RuleId, Severity } from "./types.ts";
 import type { CollectorV2Bot, CollectorV2BotUsage, CollectorV2Routine } from "./wire.generated.ts";
 import { isEvidenceId, isFingerprint, isRecommendationId, isRuleId } from "./types.ts";
@@ -166,9 +166,15 @@ const botUnused = (bot: CollectorV2Bot, collected: number, days: number): boolea
   return usage !== null && !usage.used && usage.coversAtLeastDays >= days;
 };
 
-const belowOnePercentLastWeek = ({ usage }: CollectorV2Bot): boolean => {
+const belowOnePercentLastWeek = ({ usage }: CollectorV2Bot, collected: number): boolean => {
   if (usage?.unit === "percent") return usage.amount7d < 1;
   if (usage?.unit !== "share" || usage.period !== "last_7_days") return false;
+  const end = usage.periodEnd === undefined ? null : parseTimestamp(usage.periodEnd);
+  const start = usage.periodStart === undefined ? null : parseTimestamp(usage.periodStart);
+  if ((usage.periodStart !== undefined && start === null) || (usage.periodEnd !== undefined && end === null)) return false;
+  const periodEnd = end ?? (start === null ? collected : addDays(start, 7));
+  const periodStart = start ?? addDays(periodEnd, -7);
+  if (Math.max(periodStart, addDays(collected, -7)) >= Math.min(periodEnd, collected)) return false;
   return "share" in usage ? usage.share < 0.01 : usage.shareBelow <= 0.01;
 };
 
@@ -196,7 +202,7 @@ const subjectsOf = (rule: RuleDefinition, snapshot: CollectorInput): { readonly 
     return { subjects, evidenceKeys: subjects };
   }
   if (when.kind === "bots-barely-used") {
-    const subjects = snapshot.bots.filter(belowOnePercentLastWeek).map((bot) => bot.id);
+    const subjects = snapshot.bots.filter((bot) => belowOnePercentLastWeek(bot, collected)).map((bot) => bot.id);
     return subjects.length >= when.minimumBots ? { subjects, evidenceKeys: subjects } : null;
   }
   if (when.kind === "stale-tasks") {
