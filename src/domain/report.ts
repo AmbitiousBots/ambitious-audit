@@ -176,9 +176,14 @@ const reportBot = (bot: CollectorInput["bots"][number]): SendReportPayload["bots
   const row = { name: reportText(bot.name), lastActiveAt: bot.lastActiveAt, routineCount: bot.routineCount };
   const usage = bot.usage;
   if (usage?.unit === "share") {
+    const period = {
+      usagePeriod: usage.period,
+      ...(usage.periodStart === undefined ? {} : { usagePeriodStart: usage.periodStart }),
+      ...(usage.periodEnd === undefined ? {} : { usagePeriodEnd: usage.periodEnd }),
+    };
     return "share" in usage
-      ? { ...row, usageShare: usage.share, usageShareBelow: null, usagePeriod: usage.period }
-      : { ...row, usageShare: null, usageShareBelow: usage.shareBelow, usagePeriod: usage.period };
+      ? { ...row, ...period, usageShare: usage.share, usageShareBelow: null }
+      : { ...row, ...period, usageShare: null, usageShareBelow: usage.shareBelow };
   }
   if (usage?.unit === "percent") return { ...row, usageShare: usage.amount7d / 100, usageShareBelow: null, usagePeriod: "last_7_days" };
   return { ...row, usageShare: null, usageShareBelow: null, usagePeriod: null };

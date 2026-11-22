@@ -44,7 +44,6 @@ const problemOf = (error: SchemaError): FieldProblem => {
   if (error.keyword === "type") return at(error.instancePath, `must be ${[error.params.type].flat().join(" or ")}`);
   if (error.keyword === "enum") return at(error.instancePath, `must be one of ${quoted(error.params.allowedValues)}`);
   if (error.keyword === "const") return at(error.instancePath, `must be ${quoted(error.params.allowedValue)}`);
-  if (error.keyword === "multipleOf") return at(error.instancePath, "must use whole cents");
   if (error.keyword === "pattern") return at(error.instancePath, "is not written in the required form");
   if (error.keyword === "false schema") return at(error.instancePath, "must be left out, because it does not go with the other fields of this value");
   if (error.keyword === "contains") {
@@ -93,6 +92,8 @@ export const isCollectorDocument = (raw: unknown): raw is CollectorInput => coll
 export const isReportPayload = (raw: unknown): raw is SendReportPayload => {
   const matches = (value: unknown): value is SendReportPayload => report.problems(value).length === 0;
   if (!matches(raw)) return false;
+  const { runs7d, failedRuns7d } = raw.counts.routines;
+  if (runs7d !== null && failedRuns7d !== null && failedRuns7d > runs7d) return false;
   const balance = raw.planUsage?.extraCreditsLeftUsd;
   return (balance == null || wholeCents(balance)) && new Set(raw.announcements.map((item) => item.id)).size === raw.announcements.length;
 };

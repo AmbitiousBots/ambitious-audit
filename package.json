@@ -14,7 +14,7 @@
     "depcruise": "depcruise src --output-type err-long",
     "pretest": "npm run build --silent",
     "test": "node --test \"test/**/*.test.ts\"",
-    "contract": "ambitious-contract dist/ambitious-audit.mjs",
+    "contract": "ambitious-contract dist/ambitious-audit.mjs && node --test test/collector-contract.test.ts",
     "tlc": "bash spec/check.sh",
     "check:schemas": "node scripts/check-schemas.mjs",
     "generate:wire-types": "node scripts/check-schemas.mjs --write",

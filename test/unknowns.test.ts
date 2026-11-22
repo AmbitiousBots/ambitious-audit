@@ -26,7 +26,7 @@ const base: unknown = JSON.parse(
     ],
     tasks: { closed7d: 0, open: 4, stale7d: 2, blocked: 1 },
     pages: { count: 3, updated7d: 1 },
-    planUsage: { weeklyLimitUsedPercent: 0, extraCreditsLeftUsd: 0, observedAt: "2026-11-15T00:00:00Z", period: "this_week" },
+    planUsage: { weeklyLimitUsedPercent: 0, extraCreditsLeftUsdCents: 0, observedAt: "2026-11-15T00:00:00Z", period: "this_week" },
     visibility: ["transcripts", "usage", "otherBots", "auditLog", "accountRole", "tasks", "pages", "botActivity", "routines"].map((signal) => ({ signal, seen: true, why: "Read with the bot's own tools." })),
     evidence: [
       { id: "ev-1", kind: "excerpt", text: "Never active.", source: "bot-1" },

@@ -15,7 +15,7 @@ Read the platform usage report for one period. Record each listed bot’s share 
 - For <1%, write `"shareBelow": 0.01`. Give exactly one of the two share fields.
 - For a bot counted only in a combined row, write `"usage": null`. Record the combined row in `usageOther` with its `share` and, when reported, its `botCount`.
 - When a tool returns seven-day credits or a percentage for a bot or routine, use `{ "unit": "credits", "amount7d": 3 }` or `{ "unit": "percent", "amount7d": 2.5 }`. If no tool returns routine usage, leave each routine’s `usage` null.
-- When the usage report shows plan figures, record `planUsage` with `weeklyLimitUsedPercent` (0–100), `extraCreditsLeftUsd` (USD to two decimal places), `observedAt` (UTC) and `period`. Use null for each unavailable field. Omit the object when the report has no plan figures.
+- When the usage report shows plan figures, record `planUsage` with `weeklyLimitUsedPercent` (0–100), `extraCreditsLeftUsdCents` (integer US cents, for example 29 for $0.29), `observedAt` (UTC) and `period`. Use null for each unavailable field. Omit the object when the report has no plan figures.
 
 If the tool gives exact shares for some bots and bounds for others, or omits routine usage or plan readings, keep the readings and set usage visibility to `"partial"`. Explain the bounds and missing coverage in `why`.
 
@@ -24,7 +24,7 @@ If the tool gives exact shares for some bots and bounds for others, or omits rou
 - Record `account.kind` as `owner`, `guest` or `team` when a tool or the account holder identifies the role. Otherwise use `unknown`.
 - Copy each connector’s status from the connector list. The allowed values are `ok`, `needsAuth`, `needsGrant`, `initializing` and `error`.
 - For `lastActiveAt` on a bot or `lastRunAt` on a routine, copy the reported UTC time. Use `"never"` only when the tool reports no activity since creation. Use null when the tool provides no reading.
-- Record each bot’s reported `routineCount`. Compare it with the number of listed routines for that bot and describe any mismatch in routine visibility. For each routine, include seven-day `runs7d` and `failedRuns7d` when a tool reports them. Use null for unavailable counts. Copy the optional routine times `pausedAt` and `createdAt` when available and omit them otherwise.
+- Record each bot’s reported `routineCount`. Compare it with the number of listed routines for that bot and describe any mismatch in routine visibility. For each routine, include seven-day `runs7d` and `failedRuns7d` when a tool reports them. Count failed runs within the total for the same period. Use null for unavailable counts. Copy the optional routine times `pausedAt` and `createdAt` when available and omit them otherwise.
 - Read `tasks.open`, `tasks.stale7d`, `tasks.blocked` and `tasks.closed7d` from the task module. Read `pages.count` and `pages.updated7d` from the page tool. An unavailable count is null. A reported zero is 0.
 
 ## Visibility and evidence

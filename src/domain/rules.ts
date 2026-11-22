@@ -144,37 +144,42 @@ const pausedSinceUnknown = (routine: CollectorV2Routine, collected: number, days
   !withinDays(collected, observedInstant(routine.createdAt ?? null), days) &&
   !withinDays(collected, observedInstant(routine.lastRunAt), days);
 
-type UsageReading = { readonly used: boolean; readonly coversAtLeastDays: number; readonly coversAtMostDays: number };
+type ShareUsage = Extract<CollectorV2BotUsage, { readonly unit: "share" }>;
 
-const SHARE_PERIOD_DAYS = {
-  this_week: { coversAtLeastDays: 0, coversAtMostDays: 7 },
-  last_7_days: { coversAtLeastDays: 7, coversAtMostDays: 7 },
-  last_30_days: { coversAtLeastDays: 30, coversAtMostDays: 30 },
-} as const;
-
-const usageReading = (usage: CollectorV2BotUsage): UsageReading | null => {
-  if (usage === null) return null;
-  if (usage.unit === "share") return "share" in usage ? { used: usage.share > 0, ...SHARE_PERIOD_DAYS[usage.period] } : null;
-  return { used: usage.amount7d > 0, coversAtLeastDays: 7, coversAtMostDays: 7 };
+const shareInterval = (usage: ShareUsage, collected: number): { start: number; end: number } | null => {
+  const start = usage.periodStart === undefined ? null : parseTimestamp(usage.periodStart);
+  const end = usage.periodEnd === undefined ? null : parseTimestamp(usage.periodEnd);
+  if ((usage.periodStart !== undefined && start === null) || (usage.periodEnd !== undefined && end === null)) return null;
+  const days = usage.period === "last_30_days" ? 30 : 7;
+  const inferredEnd = start === null ? collected : addDays(start, days);
+  const periodEnd = end ?? (usage.period === "this_week" ? Math.min(inferredEnd, collected) : inferredEnd);
+  return { start: start ?? addDays(periodEnd, -days), end: periodEnd };
 };
 
 const botUnused = (bot: CollectorV2Bot, collected: number, days: number): boolean => {
-  const usage = usageReading(bot.usage);
-  if (usage !== null && usage.used && usage.coversAtMostDays <= days) return false;
+  const { usage } = bot;
+  const cutoff = addDays(collected, -days);
   const lastActive = observedInstant(bot.lastActiveAt);
-  if (lastActive.known) return olderThanDays(collected, lastActive, days);
-  return usage !== null && !usage.used && usage.coversAtLeastDays >= days;
+  if (usage?.unit === "share" && usage.share !== undefined) {
+    const interval = shareInterval(usage, collected);
+    if (interval !== null) {
+      if (usage.share > 0 && interval.start >= cutoff && interval.start <= interval.end && interval.end <= collected) return false;
+      if (!lastActive.known) return usage.share === 0 && usage.period === "last_30_days" && interval.start < cutoff && interval.end >= collected;
+    }
+  } else if (usage && usage.unit !== "share" && usage.amount7d > 0 && days >= 7) {
+    return false;
+  }
+  return olderThanDays(collected, lastActive, days);
 };
 
 const belowOnePercentLastWeek = ({ usage }: CollectorV2Bot, collected: number): boolean => {
   if (usage?.unit === "percent") return usage.amount7d < 1;
   if (usage?.unit !== "share" || usage.period !== "last_7_days") return false;
-  const end = usage.periodEnd === undefined ? null : parseTimestamp(usage.periodEnd);
-  const start = usage.periodStart === undefined ? null : parseTimestamp(usage.periodStart);
-  if ((usage.periodStart !== undefined && start === null) || (usage.periodEnd !== undefined && end === null)) return false;
-  const periodEnd = end ?? (start === null ? collected : addDays(start, 7));
-  const periodStart = start ?? addDays(periodEnd, -7);
-  if (Math.max(periodStart, addDays(collected, -7)) >= Math.min(periodEnd, collected)) return false;
+  const interval = shareInterval(usage, collected);
+  if (interval === null) return false;
+  const overlapStart = Math.max(interval.start, addDays(collected, -7));
+  const overlapEnd = Math.min(interval.end, collected);
+  if (addDays(overlapStart, 6) > overlapEnd) return false;
   return "share" in usage ? usage.share < 0.01 : usage.shareBelow <= 0.01;
 };
 

@@ -233,7 +233,7 @@ test("every collector document written for 0.2.0 or 0.2.1 is still accepted and 
   }
 });
 
-test("weekly exact shares and bounds must overlap the seven days ending at the snapshot", () => {
+test("weekly exact shares and bounds need six days of overlap with the snapshot week", () => {
   const matches = (dates: { periodStart?: string; periodEnd?: string }) => {
     const document = shares();
     const bots = listOf(document.bots).map((bot, index) => ({
@@ -246,6 +246,9 @@ test("weekly exact shares and bounds must overlap the seven days ending at the s
   assert.equal(matches({ periodStart: "2026-10-01T00:00:00Z" }), false);
   assert.equal(matches({ periodEnd: "2026-11-08T00:00:00Z" }), false);
   assert.equal(matches({ periodStart: "2026-11-16T00:00:00Z" }), false);
-  assert.equal(matches({ periodStart: "2026-11-05T00:00:00Z", periodEnd: "2026-11-12T00:00:00Z" }), true);
+  assert.equal(matches({ periodEnd: "2026-11-08T00:00:01Z" }), false);
+  assert.equal(matches({ periodStart: "2026-11-09T00:00:01Z" }), false);
+  assert.equal(matches({ periodStart: "2026-11-09T00:00:00Z" }), true);
+  assert.equal(matches({ periodEnd: "2026-11-14T00:00:00Z" }), true);
   assert.equal(matches({}), true);
 });

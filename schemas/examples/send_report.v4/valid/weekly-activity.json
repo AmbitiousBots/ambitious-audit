@@ -7,6 +7,8 @@
       "name": "Work queue 1",
       "routineCount": 1,
       "usagePeriod": "last_7_days",
+      "usagePeriodEnd": "2026-11-15T00:00:00Z",
+      "usagePeriodStart": "2026-11-08T00:00:00Z",
       "usageShare": 0.25,
       "usageShareBelow": null
     },
@@ -15,6 +17,8 @@
       "name": "Work queue 2",
       "routineCount": 0,
       "usagePeriod": "last_7_days",
+      "usagePeriodEnd": "2026-11-15T00:00:00Z",
+      "usagePeriodStart": "2026-11-08T00:00:00Z",
       "usageShare": 0.25,
       "usageShareBelow": null
     },
@@ -23,6 +27,8 @@
       "name": "Work queue 3",
       "routineCount": 0,
       "usagePeriod": "last_7_days",
+      "usagePeriodEnd": "2026-11-15T00:00:00Z",
+      "usagePeriodStart": "2026-11-08T00:00:00Z",
       "usageShare": null,
       "usageShareBelow": 0.01
     },
@@ -31,6 +37,8 @@
       "name": "Work queue 4",
       "routineCount": 0,
       "usagePeriod": "last_7_days",
+      "usagePeriodEnd": "2026-11-15T00:00:00Z",
+      "usagePeriodStart": "2026-11-08T00:00:00Z",
       "usageShare": null,
       "usageShareBelow": 0.01
     },
@@ -39,6 +47,8 @@
       "name": "Work queue 5",
       "routineCount": 0,
       "usagePeriod": "last_7_days",
+      "usagePeriodEnd": "2026-11-15T00:00:00Z",
+      "usagePeriodStart": "2026-11-08T00:00:00Z",
       "usageShare": null,
       "usageShareBelow": 0.01
     },
@@ -47,6 +57,8 @@
       "name": "Work queue 6",
       "routineCount": 0,
       "usagePeriod": "last_7_days",
+      "usagePeriodEnd": "2026-11-15T00:00:00Z",
+      "usagePeriodStart": "2026-11-08T00:00:00Z",
       "usageShare": null,
       "usageShareBelow": 0.01
     },
@@ -55,6 +67,8 @@
       "name": "Work queue 7",
       "routineCount": 0,
       "usagePeriod": "last_7_days",
+      "usagePeriodEnd": "2026-11-15T00:00:00Z",
+      "usagePeriodStart": "2026-11-08T00:00:00Z",
       "usageShare": null,
       "usageShareBelow": 0.01
     },
@@ -63,6 +77,8 @@
       "name": "Work queue 8",
       "routineCount": 0,
       "usagePeriod": "last_7_days",
+      "usagePeriodEnd": "2026-11-15T00:00:00Z",
+      "usagePeriodStart": "2026-11-08T00:00:00Z",
       "usageShare": null,
       "usageShareBelow": 0.01
     },
@@ -128,7 +144,7 @@
       "priority": "low",
       "ruleId": "bots-barely-used",
       "severity": "low",
-      "summary": "6 bots each accounted for under 1% of usage in the last seven days."
+      "summary": "6 bots each accounted for under 1% of usage during their respective measured periods."
     },
     {
       "evidenceIds": [],
@@ -185,9 +201,9 @@
     "weeklyLimitUsedPercent": 58.5
   },
   "recommendations": [],
-  "reportId": "01a1dc80-f000-78f6-b85a-4bac261b5fe4",
+  "reportId": "01a1dc80-f000-727d-81dd-d207b8b48402",
   "schemaVersion": 4,
-  "summary": "1 connector is connected, but this bot has no access to it. 6 bots each accounted for under 1% of usage in the last seven days. Not observed: conversation text, the audit log, page counts. Partially observed: bot, routine and plan usage, when each bot was last active.",
+  "summary": "1 connector is connected, but this bot has no access to it. 6 bots each accounted for under 1% of usage during their respective measured periods. Not observed: conversation text, the audit log, page counts. Partially observed: bot, routine and plan usage, when each bot was last active.",
   "visibility": [
     {
       "seen": false,

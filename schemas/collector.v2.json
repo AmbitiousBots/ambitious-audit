@@ -210,7 +210,7 @@
       "additionalProperties": false,
       "required": [
         "weeklyLimitUsedPercent",
-        "extraCreditsLeftUsd",
+        "extraCreditsLeftUsdCents",
         "observedAt",
         "period"
       ],
@@ -224,15 +224,14 @@
           "maximum": 100,
           "description": "Percentage of the weekly limit consumed, as shown by the usage report."
         },
-        "extraCreditsLeftUsd": {
+        "extraCreditsLeftUsdCents": {
           "type": [
-            "number",
+            "integer",
             "null"
           ],
           "minimum": 0,
-          "maximum": 1000000000,
-          "multipleOf": 0.01,
-          "description": "Remaining extra credits in USD, to the nearest cent as reported."
+          "maximum": 100000000000,
+          "description": "Remaining extra credits in whole US cents. For 0.29 USD, record 29."
         },
         "observedAt": {
           "type": [

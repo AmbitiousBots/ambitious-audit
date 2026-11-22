@@ -16,8 +16,8 @@ const SCHEMAS = [
   { file: "send_report.v2.json", typeName: "SendReportV2", sentToService: true, maxTextCharacters: 29000 },
   // WHY: V3 adds ten announcements, each with a 64-character id and a 120-character title: 29000 + 10 * (64 + 120). Priority enums add no free text.
   { file: "send_report.v3.json", typeName: "SendReportV3", sentToService: true, maxTextCharacters: 30840 },
-  // WHY: V4 adds 200 bot names and activity times, 200 connector names and one plan observation time.
-  { file: "send_report.v4.json", typeName: "SendReportV4", sentToService: true, maxTextCharacters: 83664 },
+  // WHY: Each of 200 bots adds a name and three timestamps. V4 also adds 200 connector names and one plan timestamp.
+  { file: "send_report.v4.json", typeName: "SendReportV4", sentToService: true, maxTextCharacters: 93264 },
   { file: "send_feedback.v1.json", typeName: "SendFeedbackV1", sentToService: true, maxTextCharacters: 4100 },
 ];
 

@@ -1,7 +1,10 @@
 import type { CollectorInput, SendReportPayload, VisibilityEntry } from "./types.ts";
 
 export const planUsageOf = (snapshot: CollectorInput): SendReportPayload["planUsage"] => {
-  if (snapshot.planUsage !== undefined) return snapshot.planUsage;
+  if (snapshot.planUsage !== undefined) {
+    const { weeklyLimitUsedPercent, extraCreditsLeftUsdCents, observedAt, period } = snapshot.planUsage;
+    return { weeklyLimitUsedPercent, extraCreditsLeftUsd: extraCreditsLeftUsdCents === null ? null : extraCreditsLeftUsdCents / 100, observedAt, period };
+  }
   const legacy = snapshot.weeklyLimitUsed;
   if (!legacy || legacy.percent > 100) return null;
   return { weeklyLimitUsedPercent: legacy.percent, extraCreditsLeftUsd: null, observedAt: legacy.asOf, period: "this_week" };
@@ -34,7 +37,7 @@ const coverage = (
   return { ...entry, seen, why: complete ? why.complete : observed ? why.partial : why.unseen };
 };
 
-export const usageCoverage = (input: CollectorInput, entry: VisibilityEntry): VisibilityEntry => {
+const usageCoverage = (input: CollectorInput, entry: VisibilityEntry): VisibilityEntry => {
   const plan = planUsageOf(input);
   const planObserved = plan !== null && (plan.weeklyLimitUsedPercent !== null || plan.extraCreditsLeftUsd !== null);
   const planComplete = plan !== null && Object.values(plan).every((value) => value !== null);
@@ -76,8 +79,15 @@ export const reportCoverage = (input: CollectorInput, entry: VisibilityEntry): V
       complete: "Routine inventory and run history were observed.",
     });
   }
-  if (entry.signal === "tasks" && entry.seen === true && input.tasks.closed7d === undefined) {
-    return { ...entry, seen: "partial", why: "Task counts were reported without closures for the last seven days." };
+  if (entry.signal === "tasks" || entry.signal === "pages") {
+    const tasks = input.tasks;
+    const label = entry.signal === "tasks" ? "task" : "page";
+    const counts = entry.signal === "tasks" ? [tasks.open, tasks.stale7d, tasks.blocked, tasks.closed7d] : [input.pages.count, input.pages.updated7d];
+    return coverage(entry, counts.some((count) => count != null), counts.every((count) => count != null), {
+      partial: `Some ${label} counts were unavailable.`,
+      unseen: `No ${label} counts were reported.`,
+      complete: `All ${label} counts were reported.`,
+    });
   }
   return entry;
 };

@@ -7,8 +7,8 @@
   "title": "Review bots with a small share of usage",
   "why": "Check whether the work assigned to each bot still needs its own schedule.",
   "summary": {
-    "one": "One bot accounted for under 1% of usage in the last seven days.",
-    "many": "{count} bots each accounted for under 1% of usage in the last seven days."
+    "one": "One bot accounted for under 1% of usage during its measured period.",
+    "many": "{count} bots each accounted for under 1% of usage during their respective measured periods."
   },
   "when": {
     "kind": "bots-barely-used",

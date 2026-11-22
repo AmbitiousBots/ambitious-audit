@@ -400,8 +400,8 @@
     "at": "/bots/0/usage/shareBelow"
   },
   "collector.v2/invalid/fraction-of-a-cent.json": {
-    "keyword": "multipleOf",
-    "at": "/planUsage/extraCreditsLeftUsd"
+    "keyword": "type",
+    "at": "/planUsage/extraCreditsLeftUsdCents"
   },
   "collector.v2/invalid/percent-above-limit.json": {
     "keyword": "maximum",

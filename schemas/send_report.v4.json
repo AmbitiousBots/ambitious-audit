@@ -824,6 +824,14 @@
           "minimum": 0,
           "maximum": 100000,
           "description": "How many routines the bot has, or null when not observed."
+        },
+        "usagePeriodStart": {
+          "$ref": "#/$defs/timestamp",
+          "description": "The start of the share period in UTC, when supplied by the usage report."
+        },
+        "usagePeriodEnd": {
+          "$ref": "#/$defs/timestamp",
+          "description": "The end of the share period in UTC, when supplied by the usage report."
         }
       },
       "oneOf": [
@@ -876,7 +884,9 @@
               "enum": [
                 null
               ]
-            }
+            },
+            "usagePeriodStart": false,
+            "usagePeriodEnd": false
           }
         }
       ]

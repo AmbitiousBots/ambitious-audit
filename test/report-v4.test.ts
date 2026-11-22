@@ -9,6 +9,7 @@ import { MCP_ENVELOPE_BYTES, REQUEST_BYTE_LIMIT } from "../src/domain/report-siz
 import type { CollectorV2BotUsage } from "../src/domain/wire.generated.ts";
 import { parseCollector } from "../src/domain/input.ts";
 import { assembleReport } from "../src/domain/report.ts";
+import { isReportPayload } from "../src/domain/schema.ts";
 import { RULES } from "../src/domain/rule-pack.ts";
 import { evaluateRules } from "../src/domain/rules.ts";
 import { isReportId } from "../src/domain/types.ts";
@@ -51,6 +52,60 @@ test("a thirty-day bound cannot establish zero usage, even across a full bot inv
   assert.ok(idle.findings.some((item) => item.ruleId === "bot-unused"));
 });
 
+test("bot rows retain each supplied share boundary for both exact shares and bounds", () => {
+  for (const dates of [
+    { periodStart: "2026-10-01T00:00:00Z", periodEnd: "2026-10-08T00:00:00Z" },
+    { periodStart: "2026-11-08T00:00:00Z" }, { periodEnd: "2026-11-15T00:00:00Z" }, {},
+  ]) {
+    const bots = weekly.bots.map((bot, i) => ({
+      ...bot, usage: { unit: "share", period: "last_7_days", ...(i ? { shareBelow: 0.01 } : { share: 0.42 }), ...dates },
+    }));
+    const payload = report({ ...weekly, bots });
+    for (const row of payload.bots) {
+      assert.equal(row.usagePeriodStart, dates.periodStart);
+      assert.equal(row.usagePeriodEnd, dates.periodEnd);
+    }
+    const finding = payload.findings.find((item) => item.ruleId === "bots-barely-used");
+    if (dates.periodStart?.startsWith("2026-10")) assert.equal(finding, undefined);
+    else assert.match(finding?.summary ?? "", /measured period/);
+  }
+});
+
+test("task and page readings determine coverage and visibility findings, including observed zeros", () => {
+  for (const count of [0, 7]) {
+    const tasks = { ...unobserved.tasks, closed7d: count };
+    const pages = { ...unobserved.pages, count };
+    const partial = report({ ...unobserved, tasks, pages });
+    assert.deepEqual(partial.counts.tasks, tasks);
+    assert.deepEqual(partial.counts.pages, pages);
+    const complete = report({ ...unobserved, tasks: { open: 0, stale7d: 0, blocked: 0, closed7d: count }, pages: { count, updated7d: 0 } });
+    const unseen = report({ ...unobserved, visibility: unobserved.visibility.map((entry) =>
+      ["tasks", "pages"].includes(entry.signal) ? { ...entry, seen: "partial" } : entry) });
+    for (const signal of ["tasks", "pages"]) {
+      assert.equal(partial.visibility.find((entry) => entry.signal === signal)?.seen, "partial");
+      assert.match(partial.findings.find((item) => item.ruleId === `visibility-${signal}`)?.summary ?? "", /Partially observed/);
+      assert.equal(complete.visibility.find((entry) => entry.signal === signal)?.seen, true);
+      assert.equal(complete.findings.some((item) => item.ruleId === `visibility-${signal}`), false);
+      assert.equal(unseen.visibility.find((entry) => entry.signal === signal)?.seen, false);
+    }
+  }
+});
+
+test("failed runs cannot exceed measured runs on a routine or report", () => {
+  const withRuns = (runs7d: number | null, failedRuns7d: number | null) => ({
+    ...weekly, routines: weekly.routines.map((row) => ({ ...row, runs7d, failedRuns7d })),
+    visibility: weekly.visibility.map((entry) => entry.signal === "routines" ? { ...entry, seen: "partial" } : entry),
+  });
+  assert.throws(() => parseCollector(withRuns(0, 3)), /\/routines\/0\/failedRuns7d.*failed-runs-range/);
+  for (const [runs, failed] of [[0, 0], [2, 2], [null, 3], [2, null]] as const) {
+    const payload = report(withRuns(runs, failed));
+    assert.equal(payload.counts.routines.runs7d, runs);
+    assert.equal(payload.counts.routines.failedRuns7d, failed);
+  }
+  const payload = report(weekly);
+  assert.equal(isReportPayload({ ...payload, counts: { ...payload.counts, routines: { ...payload.counts.routines, runs7d: 0, failedRuns7d: 3 } } }), false);
+});
+
 test("each routine total requires its own complete observations", () => {
   const first = weekly.routines[0];
   if (!first) throw new Error("Missing routine fixture");
@@ -70,13 +125,14 @@ test("each routine total requires its own complete observations", () => {
   assert.deepEqual(empty.counts.routines, { active: 0, paused: 0, failing: 0, runs7d: 0, failedRuns7d: 0 });
 });
 
-test("plan credits accept whole cents, reject fractions and preserve missing values", () => {
-  for (const balance of [0, 0.29, 4.99, 999999999.99, 1000000000, null]) {
-    const planUsage = { ...weekly.planUsage, extraCreditsLeftUsd: balance };
-    assert.deepEqual(report({ ...weekly, planUsage }).planUsage, planUsage);
+test("plan credits convert whole cents to dollars and preserve missing values", () => {
+  const { extraCreditsLeftUsdCents, ...plan } = weekly.planUsage;
+  for (const cents of [0, extraCreditsLeftUsdCents, 499, 99_999_999_999, 100_000_000_000, null]) {
+    const planUsage = { ...plan, extraCreditsLeftUsdCents: cents };
+    assert.deepEqual(report({ ...weekly, planUsage }).planUsage, { ...plan, extraCreditsLeftUsd: cents === null ? null : cents / 100 });
   }
-  for (const balance of [-0.01, 0.00000000001, 0.291, 1000000000.01]) {
-    assert.throws(() => parseCollector({ ...weekly, planUsage: { ...weekly.planUsage, extraCreditsLeftUsd: balance } }));
+  for (const cents of [-1, 0.000000001, 29.1, 100_000_000_001]) {
+    assert.throws(() => parseCollector({ ...weekly, planUsage: { ...plan, extraCreditsLeftUsdCents: cents } }));
   }
   assert.equal(report(unobserved).planUsage, null);
   assert.deepEqual(report(legacy).planUsage, { weeklyLimitUsedPercent: 37, extraCreditsLeftUsd: null, observedAt: legacy.weeklyLimitUsed.asOf, period: "this_week" });
@@ -102,6 +158,8 @@ test("the report redacts private fields after matching evidence and retains each
     "desk@example.invalid", "+1 (202) 555-0148", "555-0182", "https://sample:fixture@example.invalid/path",
     "https://example.invalid/items?q=sample", "token=fixture", "Bearer sample.sample.sample",
     "sk-test-syntheticcredential", "a7B9c1D3e5F7g9H1i3J5k7L9",
+    "202‑555‑0148", "２０２－５５５－０１４８", "202\u202f555\u20090148", "202−555—0148",
+    "202\u00ad555\u00a00148", '{"token":"sample-value"}', "ｔｏｋｅｎ＝sample", "api_key: sample", "password sample",
   ];
   for (const value of privateValues) {
     const source = `Queue ${value}`;
@@ -156,9 +214,9 @@ test("usage coverage requires plan measurements and reflects missing fields", ()
   const { planUsage, ...withoutPlan } = inventory;
   assert.equal(seen(withoutPlan), "partial");
   assert.equal(seen({ ...withoutPlan, bots: [] }), false);
-  const metadataOnly = { ...planUsage, weeklyLimitUsedPercent: null, extraCreditsLeftUsd: null };
+  const metadataOnly = { ...planUsage, weeklyLimitUsedPercent: null, extraCreditsLeftUsdCents: null };
   assert.equal(seen({ ...unobserved, planUsage: metadataOnly }), false);
-  assert.equal(seen({ ...unobserved, planUsage: { ...metadataOnly, extraCreditsLeftUsd: 0 } }), "partial");
+  assert.equal(seen({ ...unobserved, planUsage: { ...metadataOnly, extraCreditsLeftUsdCents: 0 } }), "partial");
 });
 
 test("known per-bot counts override a claimed complete routine inventory", () => {

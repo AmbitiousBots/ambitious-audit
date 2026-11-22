@@ -68,7 +68,7 @@
   "evidence": [],
   "planUsage": {
     "weeklyLimitUsedPercent": 101,
-    "extraCreditsLeftUsd": 12.34,
+    "extraCreditsLeftUsdCents": 1234,
     "observedAt": "2026-11-15T00:00:00.000Z",
     "period": "this_week"
   }

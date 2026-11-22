@@ -12,7 +12,9 @@
       "usage": {
         "unit": "share",
         "period": "last_7_days",
-        "share": 0.25
+        "share": 0.25,
+        "periodStart": "2026-11-08T00:00:00Z",
+        "periodEnd": "2026-11-15T00:00:00Z"
       },
       "lastActiveAt": "2026-11-15T00:00:00.000Z",
       "routineCount": 1
@@ -23,7 +25,9 @@
       "usage": {
         "unit": "share",
         "period": "last_7_days",
-        "share": 0.25
+        "share": 0.25,
+        "periodStart": "2026-11-08T00:00:00Z",
+        "periodEnd": "2026-11-15T00:00:00Z"
       },
       "lastActiveAt": null,
       "routineCount": 0
@@ -34,7 +38,9 @@
       "usage": {
         "unit": "share",
         "period": "last_7_days",
-        "shareBelow": 0.01
+        "shareBelow": 0.01,
+        "periodStart": "2026-11-08T00:00:00Z",
+        "periodEnd": "2026-11-15T00:00:00Z"
       },
       "lastActiveAt": null,
       "routineCount": 0
@@ -45,7 +51,9 @@
       "usage": {
         "unit": "share",
         "period": "last_7_days",
-        "shareBelow": 0.01
+        "shareBelow": 0.01,
+        "periodStart": "2026-11-08T00:00:00Z",
+        "periodEnd": "2026-11-15T00:00:00Z"
       },
       "lastActiveAt": null,
       "routineCount": 0
@@ -56,7 +64,9 @@
       "usage": {
         "unit": "share",
         "period": "last_7_days",
-        "shareBelow": 0.01
+        "shareBelow": 0.01,
+        "periodStart": "2026-11-08T00:00:00Z",
+        "periodEnd": "2026-11-15T00:00:00Z"
       },
       "lastActiveAt": null,
       "routineCount": 0
@@ -67,7 +77,9 @@
       "usage": {
         "unit": "share",
         "period": "last_7_days",
-        "shareBelow": 0.01
+        "shareBelow": 0.01,
+        "periodStart": "2026-11-08T00:00:00Z",
+        "periodEnd": "2026-11-15T00:00:00Z"
       },
       "lastActiveAt": null,
       "routineCount": 0
@@ -78,7 +90,9 @@
       "usage": {
         "unit": "share",
         "period": "last_7_days",
-        "shareBelow": 0.01
+        "shareBelow": 0.01,
+        "periodStart": "2026-11-08T00:00:00Z",
+        "periodEnd": "2026-11-15T00:00:00Z"
       },
       "lastActiveAt": null,
       "routineCount": 0
@@ -89,7 +103,9 @@
       "usage": {
         "unit": "share",
         "period": "last_7_days",
-        "shareBelow": 0.01
+        "shareBelow": 0.01,
+        "periodStart": "2026-11-08T00:00:00Z",
+        "periodEnd": "2026-11-15T00:00:00Z"
       },
       "lastActiveAt": null,
       "routineCount": 0
@@ -184,7 +200,7 @@
   "evidence": [],
   "planUsage": {
     "weeklyLimitUsedPercent": 58.5,
-    "extraCreditsLeftUsd": 0.29,
+    "extraCreditsLeftUsdCents": 29,
     "observedAt": "2026-11-15T00:00:00.000Z",
     "period": "this_week"
   }

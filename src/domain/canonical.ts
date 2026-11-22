@@ -1,5 +1,5 @@
 import { isRecord } from "@ambitious/kit/domain/json";
-import { reportCoverage, usageCoverage } from "./coverage.ts";
+import { reportCoverage } from "./coverage.ts";
 import { pointerOf, refuseProblems, type FieldProblem } from "./field-problems.ts";
 import { VISIBILITY_SIGNALS, type CollectorInput, type VisibilityEntry, type VisibilityMap, type VisibilitySignal } from "./types.ts";
 import { parseTimestamp } from "./time.ts";
@@ -166,6 +166,10 @@ export const normalizeCollector = (input: CollectorInput, schemaCommand: string)
     ...repeats(input.visibility.map((entry) => entry.signal), (index) => pointerOf(["visibility", index, "signal"]), "visibility signal"),
     ...gapProblems(input),
     ...usageProblems(input),
+    ...input.routines.flatMap(({ runs7d, failedRuns7d }, index) =>
+      runs7d != null && failedRuns7d != null && failedRuns7d > runs7d
+        ? [{ pointer: pointerOf(["routines", index, "failedRuns7d"]), rule: "failed-runs-range", must: "must be at most runs7d", help: "Count failed runs within the same seven-day total." }]
+        : []),
   ]);
   const bots: readonly CollectorV2Bot[] = input.bots
     .map((bot) => ({ id: bot.id, name: bot.name, lastActiveAt: bot.lastActiveAt, routineCount: bot.routineCount, usage: copyBotUsage(bot.usage) }))
@@ -194,7 +198,8 @@ export const normalizeCollector = (input: CollectorInput, schemaCommand: string)
       : { usageOther: { share: input.usageOther.share, ...(input.usageOther.botCount === undefined ? {} : { botCount: input.usageOther.botCount }) } }),
     ...(input.weeklyLimitUsed === undefined ? {} : { weeklyLimitUsed: { percent: input.weeklyLimitUsed.percent, asOf: input.weeklyLimitUsed.asOf } }),
     ...(input.planUsage === undefined ? {} : { planUsage: { ...input.planUsage } }),
-    visibility: orderedVisibility(input).map((entry) => input.schemaVersion === 2 && entry.signal === "usage" ? usageCoverage(input, entry) : entry),
+    visibility: orderedVisibility(input).map((entry) =>
+      input.schemaVersion === 2 && ["usage", "tasks", "pages"].includes(entry.signal) ? reportCoverage(input, entry) : entry),
     evidence,
   };
 };
