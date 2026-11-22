@@ -212,7 +212,7 @@ const subjectsOf = (rule: RuleDefinition, snapshot: CollectorInput): { readonly 
   }
   const groups = new Map<string, string[]>();
   for (const routine of snapshot.routines) {
-    const key = `${routine.botId}\t${routine.schedule}`;
+    const key = JSON.stringify([routine.botId, routine.schedule]);
     const list = groups.get(key) ?? [];
     list.push(routine.id);
     groups.set(key, list);

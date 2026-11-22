@@ -388,6 +388,28 @@ test("aggregate bots need listed routine counts before the inventory can be comp
   }
 });
 
+test("duplicate routine citations identify the shared bot and matching schedules", () => {
+  const schedule = "private schedule text";
+  const bots = weekly.bots.slice(0, 2).map((bot, i) => ({ ...bot, routineCount: i === 0 ? 1 : 2 }));
+  for (const [botId, label] of [["bot-2", "Bot 2"], ["unlisted-owner", "Bot 3"]] as const) {
+    const routines = ["bot-1", botId, botId].map((owner, i) => ({
+      ...weekly.routines[0], id: `routine-${i + 1}`, botId: owner, schedule,
+    }));
+    const evidence = routines.map(({ id }, i) => ({ source: id, sourceKind: "routine", id: `ev-${i + 1}`, kind: "count" }));
+    const payload = report({ ...weekly, bots: bots.toReversed(), routines, evidence });
+    const recommendation = payload.recommendations.find((item) => item.id === "duplicate-routines");
+    assert.ok(recommendation);
+    const citations = payload.evidence.filter((row) => recommendation.evidenceIds.some((id) => id === row.id));
+    assert.deepEqual(citations.map(({ source }) => source), ["Routine 2", "Routine 3"]);
+    for (const { text } of citations) {
+      assert.ok(text.includes(label), text);
+      assert.match(text, /(?:share|same|match).*schedule|schedule.*match/iu);
+    }
+    assert.match(recommendation.title, /compare/iu);
+    assert.doesNotMatch(JSON.stringify(payload), /private schedule text|unlisted-owner/u);
+  }
+});
+
 test("a routine owned by an unlisted bot makes both inventories partial", () => {
   const bots = weekly.bots.slice(0, 1).map((bot) => ({ ...bot, routineCount: 0 }));
   const routines = weekly.routines.map((routine) => ({ ...routine, botId: "unlisted" }));

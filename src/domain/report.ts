@@ -143,7 +143,8 @@ const summaryOf = (findings: readonly Finding[], visibility: VisibilityMap, with
 };
 
 const allocateEvidence = (snapshot: CollectorInput, hits: readonly RuleHit[], findings: readonly Finding[], ranked: readonly RankedRecommendation[]) => {
-  const available = evidenceSubjects(snapshot);
+  const matchingSchedules = hits.find(({ rule }) => rule.when.kind === "duplicate-routines");
+  const available = evidenceSubjects(snapshot, new Set(matchingSchedules?.subjects));
   const firstBySubject = new Map<string, EvidenceId>();
   const citations = new Map<string, EvidenceId[]>();
   for (const hit of hits) {

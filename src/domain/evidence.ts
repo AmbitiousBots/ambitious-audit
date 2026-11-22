@@ -37,13 +37,20 @@ const botReading = ({ lastActiveAt, usage }: CollectorInput["bots"][number]): st
   return statements.join(" ") || "The bot appeared in the inventory.";
 };
 
-export const evidenceSubjects = (snapshot: CollectorInput): ReadonlyMap<EvidenceId, Subject> => {
+export const evidenceSubjects = (snapshot: CollectorInput, matchingSchedules?: ReadonlySet<string>): ReadonlyMap<EvidenceId, Subject> => {
+  const bots = snapshot.bots.map((bot, i) => ({ kind: "bot" as const, key: bot.id, source: `Bot ${i + 1}`, text: botReading(bot) }));
+  const botLabels = new Map(bots.map(({ key, source }) => [key, source]));
   const subjects: Subject[] = [
-    ...snapshot.bots.map((bot, i) => ({ kind: "bot" as const, key: bot.id, source: `Bot ${i + 1}`, text: botReading(bot) })),
-    ...snapshot.routines.map((row, i) => ({
-      kind: "routine" as const, key: row.id, source: `Routine ${i + 1}`,
-      text: row.state === "paused" && row.pausedAt ? `The routine has been paused since ${row.pausedAt}.` : `The routine is ${row.state}.`,
-    })),
+    ...bots,
+    ...snapshot.routines.map((row, i) => {
+      let text = row.state === "paused" && row.pausedAt ? `The routine has been paused since ${row.pausedAt}.` : `The routine is ${row.state}.`;
+      if (matchingSchedules?.has(row.id)) {
+        const bot = botLabels.get(row.botId) ?? `Bot ${botLabels.size + 1}`;
+        botLabels.set(row.botId, bot);
+        text += ` This routine shares a schedule with another routine on ${bot}.`;
+      }
+      return { kind: "routine" as const, key: row.id, source: `Routine ${i + 1}`, text };
+    }),
     ...snapshot.connectors.map((row, i) => ({
       kind: "connector" as const, key: row.name, source: `Connector ${i + 1}`, text: `The connector reported status ${row.status}.`,
     })),

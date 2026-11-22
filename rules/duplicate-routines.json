@@ -4,8 +4,8 @@
   "effort": "medium",
   "rank": 60,
   "dependsOnRole": true,
-  "title": "Remove the duplicate routine",
-  "why": "Two routines with the same schedule on the same bot do the same work twice. Keep one.",
+  "title": "Compare routines with matching schedules",
+  "why": "Check whether the routines on the same bot do the same work before removing either.",
   "summary": {
     "one": "1 routine repeats a schedule already used on its bot.",
     "many": "{count} routines repeat a schedule already used on their bot."
@@ -26,6 +26,14 @@
       "routines": [
         { "id": "routine-1", "botId": "bot-1", "schedule": "every day at 08:00", "state": "active", "lastRunAt": "2026-11-14T08:00:00Z", "usage": null },
         { "id": "routine-2", "botId": "bot-1", "schedule": "every Monday at 09:00", "state": "active", "lastRunAt": "2026-11-14T09:00:00Z", "usage": null }
+      ]
+    },
+    {
+      "name": "a tab in a bot ID differs from a tab in a schedule",
+      "expect": "miss",
+      "routines": [
+        { "id": "routine-1", "botId": "queue\tnorth", "schedule": "daily", "state": "active", "lastRunAt": "never", "usage": null },
+        { "id": "routine-2", "botId": "queue", "schedule": "north\tdaily", "state": "active", "lastRunAt": "never", "usage": null }
       ]
     }
   ]
