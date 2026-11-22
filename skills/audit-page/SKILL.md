@@ -7,7 +7,7 @@ description: "Turn an ambitious-audit report into a page showing findings, recom
 
 After `report build`, write a page in the bot's own page tool from `data.payload`. The module stores no rendered document.
 
-Show high-priority items before low-priority items and label each as a finding, recommendation or announcement according to its array. Within each priority, lead with recommendation titles, at most three overall, each followed by its `why` and the evidence text for its evidence ids. Then list rule findings that did not become recommendations and service announcements. Use the priorities returned by the module; do not assign or rewrite them.
+Show high-priority items before low-priority items and label each as a finding, recommendation or announcement according to its array. Within each priority, lead with recommendation titles, at most three overall, each followed by its `why` and the evidence text for its evidence ids. Resolve each citation against the evidence array in that report. Collector IDs refer to local snapshot rows. Then list rule findings that did not become recommendations and service announcements. Use the priorities returned by the module; do not assign or rewrite them.
 
 Show each announcement's title verbatim and keep its id with the item. Announcements come only from the saved service `check_updates` result passed to `report build`. Do not create, summarize or expand announcement text. When `announcements` is empty, there are no announcements to show.
 

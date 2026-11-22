@@ -13,11 +13,11 @@ Read the platform usage report for one period. Record each listed bot’s share 
 
 - For 42%, write `"share": 0.42`.
 - For <1%, write `"shareBelow": 0.01`. Give exactly one of the two share fields.
-- For a bot counted only in a combined row, write `"usage": null`. Record the combined row in `usageOther` with its `share` and, when reported, its `botCount`.
+- For a bot counted only in a combined row, write `"usage": null`. Include `usageOther` with its `share` and optional `botCount` only when at least one named bot share establishes the period.
 - When a tool returns seven-day credits or a percentage for a bot or routine, use `{ "unit": "credits", "amount7d": 3 }` or `{ "unit": "percent", "amount7d": 2.5 }`. If no tool returns routine usage, leave each routine’s `usage` null.
 - When the usage report shows plan figures, record `planUsage` with `weeklyLimitUsedPercent` (0–100), `extraCreditsLeftUsdCents` (integer US cents, for example 29 for $0.29), `observedAt` (UTC) and `period`. Use null for each unavailable field. Omit the object when the report has no plan figures.
 
-If the tool gives exact shares for some bots and bounds for others, or omits routine usage or plan readings, keep the readings and set usage visibility to `"partial"`. Explain the bounds and missing coverage in `why`.
+If the tool gives exact shares for some bots and bounds for others, or omits routine usage or plan readings, keep the readings and set usage visibility to `"partial"`.
 
 ## Account and activity
 
@@ -29,8 +29,8 @@ If the tool gives exact shares for some bots and bounds for others, or omits rou
 
 ## Visibility and evidence
 
-Include one visibility entry for each of `transcripts`, `usage`, `otherBots`, `auditLog`, `accountRole`, `tasks`, `pages`, `botActivity` and `routines`. Set `seen` to true for complete coverage, false for no observation or `"partial"` for incomplete coverage. Describe the source or gap in `why`. Each null needs a false or partial entry for its signal. Plan readings belong to `usage`, last-active times to `botActivity`, and routine inventory and run counts to `routines`. If no routine tool was available, use an empty list and state that the inventory was unavailable.
+Include one visibility entry for each of `transcripts`, `usage`, `otherBots`, `auditLog`, `accountRole`, `tasks`, `pages`, `botActivity` and `routines`. Set `seen` to true for complete coverage, false for no observation or `"partial"` for incomplete coverage. Set `scope` to `all` for account-wide access, `shared_only` for shared folders or `limited` for another restricted view. Omit scope when unknown. The module generates the report explanation from readings and scope. Each null needs a false or partial entry for its signal. Plan readings belong to `usage`, last-active times to `botActivity`, and routine inventory and run counts to `routines`. If no routine tool was available, use an empty list and mark the inventory unseen.
 
-Use evidence ids such as `ev-1`. Give a short observation of at most 200 characters for the report. Set `source` to the relevant bot id, routine id, connector name or `tasks`. Copy the exact case of each bot id. Include an evidence line for each connector that needs a sign-in or grant and for low-share readings that support a recommendation.
+Use a unique local evidence ID such as `ev-12` and a `kind` of `count` or `excerpt`. For rule citations, pair `sourceKind` with its local `source`. Use `bot` with the exact bot ID, `routine` with the routine ID, `connector` with the connector name or `tasks` with the literal `tasks`. For example, a listed bot with a measured low share can supply `{"id":"ev-12","kind":"count","sourceKind":"bot","source":"bot-3"}`. Include a connector row for each sign-in or grant finding. Evidence text and visibility notes are optional and stay local. The report generates its own evidence IDs, labels and observations.
 
 Write the collector document outside the bot’s private data directory and pass it to `snapshot --in`. Validation errors identify the field and rule.
