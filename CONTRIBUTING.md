@@ -11,10 +11,10 @@ Install [mise](https://mise.jdx.dev), then from a checkout of this repository:
 ```sh
 mise trust
 mise install
-npm ci
+npm ci --strict-peer-deps
 ```
 
-mise installs the Java and Node versions named in `.mise.toml`. Do not commit a dependency that needs a different Node version.
+mise installs the Java, Node and Python versions named in `.mise.toml`. The report tests use Python's JSON encoder. Do not commit a dependency that needs a different Node version.
 
 The kit libraries live in `vendor/`. A build does not download them. To move to a newer kit release, download that release's tarballs, check them against the release `SHA256SUMS`, replace the files in `vendor/`, and regenerate the lockfile with `npm install` so `npm ci` matches the new archives.
 
@@ -23,16 +23,9 @@ The kit libraries live in `vendor/`. A build does not download them. To move to 
 Run these before you open a pull request:
 
 ```sh
-npm ci
-npm audit --audit-level=moderate
-npm run typecheck
-npm run lint
-npm run depcruise
-npm test
-npm run contract
-npm run check:schemas
-npm run tlc
-npm run verify
+npm ci --strict-peer-deps
+npm run release:check
+npm run release:build
 ```
 
 `npm test` builds `dist/ambitious-audit.mjs` and runs the tests. `npm run tlc` checks the report-delivery model in `spec/`. `npm run verify` runs the features in `verify/features.json`. `npm run lint` also checks that the repository does not contain an internal plan id or a path from one person's machine.
