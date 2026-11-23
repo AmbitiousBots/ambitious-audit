@@ -58,7 +58,7 @@ export const completeRoutineList = (input: CollectorInput, inventory = botInvent
   const seen = entry?.seen;
   if (entry && seen === true && !restricted(entry)) return true;
   if (seen === false && input.routines.length === 0) return false;
-  return inventory === "complete" && input.bots.length > 0 && input.bots.every((bot) => bot.routineCount !== null);
+  return inventory === "complete" && input.bots.every((bot) => bot.routineCount !== null);
 };
 
 export const routineRunCount = (
@@ -145,7 +145,7 @@ export const reportCoverage = (input: CollectorInput, entry: CollectorVisibility
       inventoryMeasure("weekly runs", input.routines, (row) => routineRunCount(row, "runs7d", collected) !== null, listed),
       inventoryMeasure("weekly failures", input.routines, (row) => routineRunCount(row, "failedRuns7d", collected) !== null, listed),
     ];
-    return coverage(entry, inventory === "incomplete" || measures.some((item) => item.observed), measures.every((item) => item.complete), measures);
+    return coverage(entry, inventory === "incomplete" || (listed && input.routines.length === 0) || measures.some((item) => item.observed), measures.every((item) => item.complete), measures);
   }
   if (entry.signal === "tasks" || entry.signal === "pages") {
     const { open, stale7d, blocked, closed7d } = input.tasks;

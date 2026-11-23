@@ -369,6 +369,24 @@ test("usage coverage requires plan measurements and reflects missing fields", ()
   assert.equal(seen({ ...unobserved, planUsage: { ...metadataOnly, extraCreditsLeftUsdCents: 0 } }), "partial");
 });
 
+test("a confirmed empty bot inventory reports zero routines instead of an unobserved total", () => {
+  const mark = (seen: boolean | "partial", scope?: "all" | "limited") => unobserved.visibility.map((entry) => {
+    if (entry.signal === "otherBots") return { ...entry, seen: true, scope: "all", why: "The account listed no other bots." };
+    if (entry.signal === "routines") return { ...entry, seen, ...(scope === undefined ? {} : { scope }), why: "The account listed no routines." };
+    return entry;
+  });
+  const zeros = { active: 0, paused: 0, failing: 0, runs7d: 0, failedRuns7d: 0 };
+  const partial = report({ ...unobserved, visibility: mark("partial") });
+  assert.deepEqual(partial.counts.routines, zeros);
+  assert.equal(partial.visibility.find((entry) => entry.signal === "routines")?.seen, "partial");
+  const limited = report({ ...unobserved, visibility: mark(true, "limited") });
+  assert.deepEqual(limited.counts.routines, zeros);
+  assert.equal(limited.visibility.find((entry) => entry.signal === "routines")?.seen, "partial");
+  const unseen = report({ ...unobserved, visibility: mark(false) });
+  assert.deepEqual(unseen.counts.routines, { active: null, paused: null, failing: null, runs7d: null, failedRuns7d: null });
+  assert.equal(unseen.visibility.find((entry) => entry.signal === "routines")?.seen, false);
+});
+
 test("known per-bot counts override a claimed complete routine inventory", () => {
   const empty = report({ ...weekly, routines: [] });
   const wrongBot = report({ ...weekly, routines: weekly.routines.map((routine) => ({ ...routine, botId: "bot-2" })) });
