@@ -66,7 +66,7 @@ const announcements = Array.from({ length: 12 }, (_, index) => ({
 announcements.push({ ...announcements[0], priority: "high", title: "A duplicate must not replace the first entry." });
 const built = run(["report", "build"], JSON.stringify({ snapshotId: snapshot.snapshotId, reviewRequired: true, announcements }));
 assert.equal(built.payload.schemaVersion, 4);
-assert.deepEqual(built.payload.moduleVersions, { audit: "0.4.1" });
+assert.deepEqual(built.payload.moduleVersions, { audit: "0.4.2" });
 assert.deepEqual(built.payload.announcements, [11, 0, 1, 2, 3, 4, 5, 6, 7, 8].map((index) => ({
   id: announcements[index].id,
   priority: announcements[index].priority,

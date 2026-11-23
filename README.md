@@ -2,7 +2,7 @@
 
 The audit module turns what a bot can see in an account into a snapshot, diffs it against a stored baseline, applies rule-based findings and returns at most three recommendations, each citing its evidence, plus a map of what the bot could not see. A value the bot could not observe is recorded as unknown, never as zero, and no finding is made from it. It is a command-line tool with JSON in and JSON out, one SQLite file and no user interface. The bot shows results in its own pages. A report leaves the computer only when the owner has approved the tool that sends it and the platform confirms that approval covers the call.
 
-The module follows the shared module contract in [ambitious-kit](https://github.com/AmbitiousBots/ambitious-kit/blob/kit-v0.4.9/MODULE_CONTRACT.md): one binary, a JSON envelope on stdout, one SQLite file, deterministic with `--now` and `--seed`, and no network. Version 0.4.1 uses kit 0.4.9, kept under `vendor/` so a build does not download it. The release file is `ambitious-audit-0.4.1.mjs`.
+The module follows the shared module contract in [ambitious-kit](https://github.com/AmbitiousBots/ambitious-kit/blob/kit-v0.4.9/MODULE_CONTRACT.md): one binary, a JSON envelope on stdout, one SQLite file, deterministic with `--now` and `--seed`, and no network. Version 0.4.2 uses kit 0.4.9, kept under `vendor/` so a build does not download it. The release file is `ambitious-audit-0.4.2.mjs`.
 
 Part of [Ambitious](https://ambitiousbots.com). Licensed under the Apache License, Version 2.0; see [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
@@ -209,16 +209,11 @@ Use collector v2 for new readings. Existing collector v1 inputs keep their canon
 ## Checks
 
 ```text
-npm ci
-npm audit --audit-level=moderate
-npm run typecheck
-npm run lint
-npm run depcruise
-npm test
-npm run contract
-npm run check:schemas
-npm run tlc
-npm run verify
+npm ci --strict-peer-deps
+npm run release:check
+npm run release:build
 ```
 
 `npm test` builds `dist/ambitious-audit.mjs` and runs the unit, migration and contract tests. `npm run tlc` checks the report-delivery model in `spec/`.
+
+`npm run release:build` writes the versioned module and its `SHA256SUMS` to `dist/<version>/`.

@@ -252,7 +252,7 @@ test("with an unknown role, three connectors that need a sign-in give one sign-i
   assert.equal(validateReport(payload), true);
   assert.equal(payload.accountKind, "unknown");
   assert.deepEqual(listOf(payload.recommendations).map((item) => item.id), ["connector-needs-auth"]);
-  assert.deepEqual(dataOf(payload.moduleVersions), { audit: "0.4.1" });
+  assert.deepEqual(dataOf(payload.moduleVersions), { audit: "0.4.2" });
 });
 
 test("with an unknown role, a connector that needs a sign-in but has no evidence line gets a finding and no recommendation", (t) => {
