@@ -12,28 +12,32 @@ import type { VisibilitySignal } from "../src/domain/types.ts";
 
 const base: unknown = JSON.parse(
   JSON.stringify({
-    schemaVersion: 1,
+    schemaVersion: 2,
     collectedAt: "2026-11-15T00:00:00Z",
     account: { kind: "owner", label: "Main" },
-    bots: [{ id: "bot-1", name: "Helper", lastActiveAt: "never", routineCount: 2, usage: { unit: "percent", amount7d: 0 } }],
+    bots: [
+      { id: "bot-1", name: "Queue", lastActiveAt: "2026-11-14T08:00:00Z", routineCount: 2, usage: { unit: "percent", amount7d: 1 } },
+      { id: "bot-2", name: "Desk", lastActiveAt: "never", routineCount: 0, usage: { unit: "percent", amount7d: 0 } },
+    ],
     routines: [
-      { id: "routine-1", botId: "bot-1", schedule: "every day at 08:00", state: "paused", lastRunAt: "2026-11-01T00:00:00Z", pausedAt: "2026-11-02T00:00:00Z", usage: { unit: "percent", amount7d: 0 } },
-      { id: "routine-2", botId: "bot-1", schedule: "every day at 08:00", state: "failing", lastRunAt: "2026-11-14T08:00:00Z", usage: { unit: "percent", amount7d: 0 } },
+      { id: "routine-1", botId: "bot-1", schedule: "every day at 08:00", runs7d: 0, failedRuns7d: 0, state: "paused", lastRunAt: "2026-11-01T00:00:00Z", pausedAt: "2026-11-02T00:00:00Z", usage: { unit: "percent", amount7d: 0 } },
+      { id: "routine-2", botId: "bot-1", schedule: "every day at 08:00", runs7d: 1, failedRuns7d: 1, state: "failing", lastRunAt: "2026-11-14T08:00:00Z", usage: { unit: "percent", amount7d: 0 } },
     ],
     connectors: [
       { name: "calendar", status: "needsAuth" },
       { name: "documents", status: "needsGrant" },
     ],
-    tasks: { open: 4, stale7d: 2, blocked: 1 },
+    tasks: { closed7d: 0, open: 4, stale7d: 2, blocked: 1 },
     pages: { count: 3, updated7d: 1 },
+    planUsage: { weeklyLimitUsedPercent: 0, extraCreditsLeftUsdCents: 0, observedAt: "2026-11-15T00:00:00Z", period: "this_week" },
     visibility: ["transcripts", "usage", "otherBots", "auditLog", "accountRole", "tasks", "pages", "botActivity", "routines"].map((signal) => ({ signal, seen: true, why: "Read with the bot's own tools." })),
     evidence: [
-      { id: "ev-1", kind: "excerpt", text: "Never active.", source: "bot-1" },
-      { id: "ev-2", kind: "excerpt", text: "Paused since the start of the month.", source: "routine-1" },
-      { id: "ev-3", kind: "excerpt", text: "Failing.", source: "routine-2" },
-      { id: "ev-4", kind: "excerpt", text: "Needs a sign-in.", source: "calendar" },
-      { id: "ev-5", kind: "excerpt", text: "Not shared with this bot.", source: "documents" },
-      { id: "ev-6", kind: "count", text: "2 stale tasks.", source: "tasks" },
+      { id: "ev-1", kind: "excerpt", text: "Never active.", sourceKind: "bot", source: "bot-2" },
+      { id: "ev-2", kind: "excerpt", text: "Paused since the start of the month.", sourceKind: "routine", source: "routine-1" },
+      { id: "ev-3", kind: "excerpt", text: "Failing.", sourceKind: "routine", source: "routine-2" },
+      { id: "ev-4", kind: "excerpt", text: "Needs a sign-in.", sourceKind: "connector", source: "calendar" },
+      { id: "ev-5", kind: "excerpt", text: "Not shared with this bot.", sourceKind: "connector", source: "documents" },
+      { id: "ev-6", kind: "count", text: "2 stale tasks.", sourceKind: "tasks", source: "tasks" },
     ],
   }),
 );
@@ -59,6 +63,7 @@ const GROUPS: readonly Group[] = [
     signal: "usage",
     rules: [],
     hide: (document) => {
+      delete document.planUsage;
       document.bots = each(document.bots, (bot) => ({ ...bot, usage: null }));
       document.routines = each(document.routines, (routine) => ({ ...routine, usage: null }));
     },
@@ -91,7 +96,9 @@ test("for every combination of unobserved groups, rules fire only on observed va
     const blind = new Set(hidden.flatMap((group) => group.rules));
     const expected = [...ALWAYS, ...GROUPS.flatMap((group) => group.rules)].filter((rule) => !blind.has(rule)).sort();
     assert.deepEqual(findings.filter((finding) => finding.kind === "rule").map((finding) => String(finding.ruleId)).sort(), expected, label);
-    assert.equal(findings.filter((finding) => finding.kind === "visibility").length, hidden.length, label);
+    const gaps = new Set(hidden.map((group) => group.signal));
+    if (gaps.has("routines")) gaps.add("usage");
+    assert.equal(findings.filter((finding) => finding.kind === "visibility").length, gaps.size, label);
     const roleUnknown = hidden.some((group) => group.signal === "accountRole");
     for (const finding of findings.filter((item) => item.kind === "rule")) {
       assert.equal(finding.withheld, roleUnknown && !GIVEN_IN_ANY_MODE.includes(String(finding.ruleId)) ? "roleUnknown" : undefined, `${label}: ${finding.ruleId}`);
@@ -109,8 +116,8 @@ test("the rules given when the role is unknown are the two connector rules and s
   const document = documentWith(roleGroup, roleGroup);
   document.evidence = [
     ...(Array.isArray(document.evidence) ? document.evidence : []),
-    { id: "ev-7", kind: "excerpt", text: "A second line about the calendar connector.", source: "Calendar" },
-    { id: "ev-8", kind: "excerpt", text: "A line that only mentions the calendar connector.", source: "calendar tool" },
+    { id: "ev-7", kind: "excerpt", text: "A second line about the calendar connector.", sourceKind: "connector", source: "Calendar" },
+    { id: "ev-8", kind: "excerpt", text: "A line that only mentions the calendar connector.", sourceKind: "connector", source: "calendar tool" },
   ];
   const snapshot = parseCollector(document);
   const connectorNames = new Set(snapshot.connectors.map((connector) => connector.name.toLowerCase()));

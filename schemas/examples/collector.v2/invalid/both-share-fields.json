@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 2,
+  "collectedAt": "2026-11-15T00:00:00.000Z",
+  "account": {
+    "kind": "owner",
+    "label": "Workspace"
+  },
+  "bots": [
+    {
+      "id": "bot-1",
+      "name": "Work queue",
+      "lastActiveAt": null,
+      "routineCount": null,
+      "usage": {
+        "unit": "share",
+        "period": "last_7_days",
+        "share": 0.002,
+        "shareBelow": 0.01
+      }
+    }
+  ],
+  "routines": [],
+  "connectors": [],
+  "tasks": {
+    "open": null,
+    "stale7d": null,
+    "blocked": null,
+    "closed7d": null
+  },
+  "pages": {
+    "count": null,
+    "updated7d": null
+  },
+  "visibility": [
+    {
+      "signal": "transcripts",
+      "seen": false,
+      "why": "The tool was unavailable."
+    },
+    {
+      "signal": "usage",
+      "seen": false,
+      "why": "The tool was unavailable."
+    },
+    {
+      "signal": "otherBots",
+      "seen": false,
+      "why": "The tool was unavailable."
+    },
+    {
+      "signal": "auditLog",
+      "seen": false,
+      "why": "The tool was unavailable."
+    },
+    {
+      "signal": "accountRole",
+      "seen": true,
+      "why": "The account settings show the role."
+    },
+    {
+      "signal": "tasks",
+      "seen": false,
+      "why": "The tool was unavailable."
+    },
+    {
+      "signal": "pages",
+      "seen": false,
+      "why": "The tool was unavailable."
+    },
+    {
+      "signal": "botActivity",
+      "seen": false,
+      "why": "The tool was unavailable."
+    },
+    {
+      "signal": "routines",
+      "seen": false,
+      "why": "The tool was unavailable."
+    }
+  ],
+  "evidence": []
+}

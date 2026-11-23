@@ -1,5 +1,6 @@
 import { isRecord } from "@ambitious/kit/domain/json";
 import botUnused from "../../rules/bot-unused.json" with { type: "json" };
+import botsBarelyUsed from "../../rules/bots-barely-used.json" with { type: "json" };
 import connectorNeedsAuth from "../../rules/connector-needs-auth.json" with { type: "json" };
 import connectorNeedsGrant from "../../rules/connector-needs-grant.json" with { type: "json" };
 import duplicateRoutines from "../../rules/duplicate-routines.json" with { type: "json" };
@@ -10,7 +11,7 @@ import settingsFile from "../../rules/settings.json" with { type: "json" };
 import staleTasks from "../../rules/stale-tasks.json" with { type: "json" };
 import { parseRule, type RuleDefinition } from "./rules.ts";
 
-const FILES: readonly unknown[] = [failingRoutine, connectorNeedsAuth, connectorNeedsGrant, pausedRoutine, pausedRoutineSinceUnknown, botUnused, staleTasks, duplicateRoutines];
+const FILES: readonly unknown[] = [failingRoutine, connectorNeedsAuth, connectorNeedsGrant, pausedRoutine, pausedRoutineSinceUnknown, botUnused, staleTasks, duplicateRoutines, botsBarelyUsed];
 
 export const RULES: readonly RuleDefinition[] = FILES.map(parseRule);
 

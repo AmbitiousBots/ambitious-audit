@@ -12,7 +12,7 @@ import { sha256Hex } from "../src/db/hash.ts";
 
 const binary = join(import.meta.dirname, "..", "dist", "ambitious-audit.mjs");
 const owner = readFileSync(join(import.meta.dirname, "fixtures", "owner.json"), "utf8");
-const reportSchema = JSON.parse(readFileSync(join(import.meta.dirname, "..", "schemas", "send_report.v3.json"), "utf8"));
+const reportSchema = JSON.parse(readFileSync(join(import.meta.dirname, "..", "schemas", "send_report.v4.json"), "utf8"));
 const ajv = new Ajv2020({ allErrors: true, strict: true });
 const validateReport = ajv.compile(reportSchema);
 
@@ -66,7 +66,7 @@ test("snapshot, diff, recommend and report build follow the limits", (t) => {
   assert.equal(built.exit, 0);
   const payload = dataOf(built.data).payload;
   assert.equal(validateReport(payload), true);
-  assert.equal(dataOf(payload).schemaVersion, 3);
+  assert.equal(dataOf(payload).schemaVersion, 4);
   assert.deepEqual(dataOf(payload).announcements, []);
   assert.equal(dataOf(built.data).reportId, dataOf(run(home, ["report", "build"], JSON.stringify({ snapshotId, reviewRequired: true })).data).reportId);
   const reportId = dataOf(built.data).reportId;
@@ -172,7 +172,7 @@ test("a collector that observed nothing yields only visibility findings and no r
   const payload = dataOf(dataOf(built.data).payload);
   assert.equal(validateReport(payload), true);
   assert.equal(payload.accountKind, "unknown");
-  assert.deepEqual(dataOf(payload.counts).tasks, { open: null, stale7d: null, blocked: null });
+  assert.deepEqual(dataOf(payload.counts).tasks, { closed7d: null, open: null, stale7d: null, blocked: null });
   assert.deepEqual(dataOf(payload.counts).pages, { count: null, updated7d: null });
   assert.match(String(payload.summary), /The account role is unknown/);
   assert.match(String(payload.summary), /Not observed: .*task counts.*page counts/);
@@ -189,7 +189,7 @@ test("a partly observed account with an unknown role gets advice about its own c
   assert.deepEqual(fromRules.map((finding) => finding.withheld), ["roleUnknown", undefined, undefined, undefined]);
   assert.deepEqual(
     findings.filter((finding) => finding.kind === "visibility").map((finding) => finding.ruleId),
-    ["visibility-transcripts", "visibility-usage", "visibility-audit-log", "visibility-account-role", "visibility-pages", "visibility-bot-activity"],
+    ["visibility-transcripts", "visibility-usage", "visibility-audit-log", "visibility-account-role", "visibility-tasks", "visibility-pages", "visibility-bot-activity", "visibility-routines"],
   );
 
   const recommended = dataOf(run(home, ["recommend"], JSON.stringify({ snapshotId })).data);
@@ -204,9 +204,18 @@ test("a partly observed account with an unknown role gets advice about its own c
   const payload = dataOf(dataOf(run(home, ["report", "build"], JSON.stringify({ snapshotId, reviewRequired: false })).data).payload);
   assert.equal(validateReport(payload), true);
   assert.deepEqual(dataOf(payload.counts).connectors, { ok: 0, needsAuth: 1, needsGrant: 1, initializing: 1, error: 0 });
-  assert.deepEqual(dataOf(payload.counts).tasks, { open: 14, stale7d: 3, blocked: 1 });
+  assert.deepEqual(dataOf(payload.counts).tasks, { closed7d: null, open: 14, stale7d: 3, blocked: 1 });
   assert.deepEqual(dataOf(payload.counts).pages, { count: null, updated7d: null });
-  assert.ok(listOf(payload.evidence).some((item) => item.id === "ev-2" && item.source === "tasks"));
+  const taskAdvice = listOf(payload.recommendations).find((item) => item.id === "stale-tasks");
+  assert.deepEqual(taskAdvice?.evidenceIds, ["ev-3"]);
+  assert.ok(listOf(payload.evidence).some((item) => item.id === "ev-3" && item.source === "Task counts"));
+  const db = openDb(join(home, "audit", "audit.sqlite"), { readonly: true });
+  try {
+    const storedTask = db.prepare("SELECT json FROM recommendations WHERE id = ? AND snapshot_id = ?").get("stale-tasks", String(snapshotId));
+    assert.deepEqual(JSON.parse(String(storedTask?.json)).evidenceIds, ["ev-2"]);
+  } finally {
+    db.close();
+  }
   assert.deepEqual(listOf(payload.recommendations).map((item) => item.id), ["connector-needs-auth", "connector-needs-grant", "stale-tasks"]);
   assert.match(String(payload.summary), /recommendations that depend on it are withheld \(1 in this report\)/);
 });
@@ -243,7 +252,7 @@ test("with an unknown role, three connectors that need a sign-in give one sign-i
   assert.equal(validateReport(payload), true);
   assert.equal(payload.accountKind, "unknown");
   assert.deepEqual(listOf(payload.recommendations).map((item) => item.id), ["connector-needs-auth"]);
-  assert.deepEqual(dataOf(payload.moduleVersions), { audit: "0.3.0" });
+  assert.deepEqual(dataOf(payload.moduleVersions), { audit: "0.4.0" });
 });
 
 test("with an unknown role, a connector that needs a sign-in but has no evidence line gets a finding and no recommendation", (t) => {
@@ -355,9 +364,10 @@ test("a null needs its visibility gap, and a role nobody saw must be unknown", (
 
 test("schema prints the collector schema, and schema with a command name prints that command's input schema", (t) => {
   const home = freshHome(t);
-  const collector: unknown = JSON.parse(readFileSync(join(import.meta.dirname, "..", "schemas", "collector.v1.json"), "utf8"));
+  const collector: unknown = JSON.parse(readFileSync(join(import.meta.dirname, "..", "schemas", "collector.v2.json"), "utf8"));
   const printed = dataOf(run(home, ["schema"]).data);
   assert.deepEqual(printed.schema, collector);
+  assert.deepEqual(dataOf(run(home, ["schema", "send", "report"]).data).schema, reportSchema);
   assert.equal(printed.input, "snapshot");
   const names = Array.isArray(printed.commands) ? printed.commands.filter((name) => typeof name === "string") : [];
   assert.deepEqual(names, ["snapshot", "baseline set", "diff", "findings", "recommend", "report build", "report mark", "feedback build"]);
@@ -405,8 +415,8 @@ test("a routine created paused on the day of the snapshot, and one paused since 
   const payload = dataOf(dataOf(built.data).payload);
   assert.equal(validateReport(payload), true);
   assert.doesNotMatch(JSON.stringify([payload.summary, payload.findings, payload.recommendations]), /\d+\s*\+?\s*days|for more than/);
-  assert.deepEqual(dataOf(payload.counts).routines, { active: 1, paused: 2, failing: 0 });
-  assert.ok(listOf(payload.visibility).some((entry) => entry.signal === "usage" && entry.seen === false && String(entry.why).includes("one summed line for the rest")));
+  assert.deepEqual(dataOf(payload.counts).routines, { active: null, paused: null, failing: null, runs7d: null, failedRuns7d: null });
+  assert.ok(listOf(payload.visibility).some((entry) => entry.signal === "usage" && entry.seen === "partial" && String(entry.why).includes("one summed line for the rest")));
 });
 
 test("a routine whose pause time is 8 days before the snapshot is reported as paused for more than 7 days", (t) => {
@@ -528,7 +538,7 @@ test("announcement length boundaries are accepted and ignored service fields are
   assert.deepEqual(payload.announcements, [kept]);
 });
 
-for (const version of [1, 2]) {
+for (const version of [1, 2, 3]) {
   test(`stored v${version} reports are returned unchanged and can still be reviewed, sent and acknowledged`, (t) => {
     const home = freshHome(t);
     const snapshotId = dataOf(run(home, ["snapshot"], owner).data).snapshotId;
@@ -551,7 +561,7 @@ for (const version of [1, 2]) {
     const replayed = run(home, ["report", "build"], JSON.stringify(input));
     assert.equal(replayed.exit, 0, replayed.stdout);
     assert.deepEqual(dataOf(replayed.data).payload, legacyPayload);
-    assert.equal(dataOf(dataOf(replayed.data).payload).announcements, undefined);
+    assert.equal(dataOf(dataOf(replayed.data).payload).bots, undefined);
     const upgraded = run(home, ["report", "build"], JSON.stringify({ ...input, reviewRequired: true }));
     assert.equal(upgraded.exit, 0, upgraded.stdout);
     assert.deepEqual(dataOf(upgraded.data).payload, legacyPayload);

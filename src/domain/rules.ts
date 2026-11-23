@@ -1,8 +1,9 @@
 import { isRecord } from "@ambitious/kit/domain/json";
-import { observedInstant, olderThanDays, parseTimestamp, withinDays } from "./time.ts";
+import { evidenceSubjects, type SourceKind } from "./evidence.ts";
+import { addDays, observedInstant, olderThanDays, parseTimestamp, withinDays } from "./time.ts";
 import type { CollectorInput, Effort, EvidenceId, EvidenceIds, Fingerprint, RuleId, Severity } from "./types.ts";
-import type { CollectorV1Bot, CollectorV1BotUsage, CollectorV1Routine } from "./wire.generated.ts";
-import { isEvidenceId, isFingerprint, isRecommendationId, isRuleId } from "./types.ts";
+import type { CollectorV2Bot, CollectorV2BotUsage, CollectorV2Routine } from "./wire.generated.ts";
+import { isFingerprint, isRecommendationId, isRuleId } from "./types.ts";
 
 type CountText = { readonly one: string; readonly many: string };
 
@@ -12,6 +13,7 @@ type RuleWhen =
   | { readonly kind: "routine-paused-since-unknown"; readonly unlessCreatedOrRunWithinDays: number }
   | { readonly kind: "connector-status"; readonly status: "needsAuth" | "needsGrant" }
   | { readonly kind: "bot-unused"; readonly olderThanDays: number }
+  | { readonly kind: "bots-barely-used"; readonly minimumBots: number }
   | { readonly kind: "stale-tasks"; readonly moreThan: number }
   | { readonly kind: "duplicate-routines" };
 
@@ -72,6 +74,7 @@ const parseWhen = (value: unknown): RuleWhen => {
     return { kind: "connector-status", status };
   }
   if (kind === "bot-unused") return { kind: "bot-unused", olderThanDays: wholeNumber(value.olderThanDays, "when.olderThanDays") };
+  if (kind === "bots-barely-used") return { kind, minimumBots: wholeNumber(value.minimumBots, "when.minimumBots") };
   if (kind === "stale-tasks") return { kind: "stale-tasks", moreThan: wholeNumber(value.moreThan, "when.moreThan") };
   if (kind === "duplicate-routines") return { kind: "duplicate-routines" };
   return brokenRule("when.kind");
@@ -103,14 +106,9 @@ const referenceMs = (snapshot: CollectorInput): number => {
   return parsed;
 };
 
-const evidenceFor = (snapshot: CollectorInput, keys: readonly string[]): EvidenceId[] => {
-  const wanted = new Set(keys.map((key) => key.toLowerCase()));
-  const ids: EvidenceId[] = [];
-  for (const item of snapshot.evidence) {
-    if (!wanted.has(item.source.toLowerCase())) continue;
-    if (isEvidenceId(item.id) && !ids.includes(item.id)) ids.push(item.id);
-  }
-  return ids.slice(0, 10);
+const evidenceFor = (evidence: ReturnType<typeof evidenceSubjects>, kind: SourceKind, subjects: readonly string[]): EvidenceId[] => {
+  const wanted = new Set(subjects);
+  return [...evidence].filter(([, subject]) => subject.kind === kind && wanted.has(subject.key)).map(([id]) => id);
 };
 
 const sentence = (summary: CountText, count: number): string => (count === 1 ? summary.one : summary.many.replaceAll("{count}", String(count)));
@@ -121,93 +119,123 @@ const fingerprintFor = (id: RuleId, subjects: readonly string[]): Fingerprint =>
   return text;
 };
 
-const hit = (rule: RuleDefinition, snapshot: CollectorInput, subjects: readonly string[], evidenceKeys: readonly string[]): RuleHit | null => {
+const hit = (rule: RuleDefinition, snapshot: CollectorInput, subjects: readonly string[], evidenceIds: EvidenceIds): RuleHit | null => {
   if (subjects.length === 0) return null;
   return {
     rule,
     subjects,
     withheld: rule.dependsOnRole && snapshot.account.kind === "unknown",
-    evidenceIds: evidenceFor(snapshot, evidenceKeys),
+    evidenceIds,
     summary: sentence(rule.summary, subjects.length),
     fingerprint: fingerprintFor(rule.id, subjects),
   };
 };
 
-const pausedLongerThan = (routine: CollectorV1Routine, collected: number, days: number): boolean =>
+const pausedLongerThan = (routine: CollectorV2Routine, collected: number, days: number): boolean =>
   routine.state === "paused" && routine.pausedAt !== undefined && olderThanDays(collected, observedInstant(routine.pausedAt), days);
 
-const pausedSinceUnknown = (routine: CollectorV1Routine, collected: number, days: number): boolean =>
+const pausedSinceUnknown = (routine: CollectorV2Routine, collected: number, days: number): boolean =>
   routine.state === "paused" &&
   routine.pausedAt === undefined &&
   !withinDays(collected, observedInstant(routine.createdAt ?? null), days) &&
   !withinDays(collected, observedInstant(routine.lastRunAt), days);
 
-type UsageReading = { readonly used: boolean; readonly coversAtLeastDays: number; readonly coversAtMostDays: number };
+type ShareUsage = Extract<CollectorV2BotUsage, { readonly unit: "share" }>;
 
-const SHARE_PERIOD_DAYS = {
-  this_week: { coversAtLeastDays: 0, coversAtMostDays: 7 },
-  last_7_days: { coversAtLeastDays: 7, coversAtMostDays: 7 },
-  last_30_days: { coversAtLeastDays: 30, coversAtMostDays: 30 },
-} as const;
-
-const usageReading = (usage: CollectorV1BotUsage): UsageReading | null => {
-  if (usage === null) return null;
-  if (usage.unit === "share") return { used: usage.share > 0, ...SHARE_PERIOD_DAYS[usage.period] };
-  return { used: usage.amount7d > 0, coversAtLeastDays: 7, coversAtMostDays: 7 };
+const shareInterval = (usage: ShareUsage, collected: number): { start: number; end: number } | null => {
+  const start = usage.periodStart === undefined ? null : parseTimestamp(usage.periodStart);
+  const end = usage.periodEnd === undefined ? null : parseTimestamp(usage.periodEnd);
+  if ((usage.periodStart !== undefined && start === null) || (usage.periodEnd !== undefined && end === null)) return null;
+  const days = usage.period === "last_30_days" ? 30 : 7;
+  const inferredEnd = start === null ? collected : addDays(start, days);
+  const periodEnd = end ?? (usage.period === "this_week" ? Math.min(inferredEnd, collected) : inferredEnd);
+  return { start: start ?? addDays(periodEnd, -days), end: periodEnd };
 };
 
-const botUnused = (bot: CollectorV1Bot, collected: number, days: number): boolean => {
-  const usage = usageReading(bot.usage);
-  if (usage !== null && usage.used && usage.coversAtMostDays <= days) return false;
+const botUnused = (bot: CollectorV2Bot, collected: number, days: number): boolean => {
+  const { usage } = bot;
+  const cutoff = addDays(collected, -days);
   const lastActive = observedInstant(bot.lastActiveAt);
-  if (lastActive.known) return olderThanDays(collected, lastActive, days);
-  return usage !== null && !usage.used && usage.coversAtLeastDays >= days;
+  if (usage?.unit === "share" && usage.share !== undefined) {
+    const interval = shareInterval(usage, collected);
+    if (interval !== null) {
+      if (usage.share > 0 && interval.start >= cutoff && interval.start <= Math.min(interval.end, collected)) return false;
+      if (!lastActive.known) return usage.share === 0 && usage.period === "last_30_days" && interval.start < cutoff && interval.end >= collected;
+    }
+  } else if (usage && usage.unit !== "share" && usage.amount7d > 0 && days >= 7) {
+    return false;
+  }
+  return olderThanDays(collected, lastActive, days);
 };
 
-const subjectsOf = (rule: RuleDefinition, snapshot: CollectorInput): { readonly subjects: readonly string[]; readonly evidenceKeys: readonly string[] } | null => {
+const belowOnePercentLastWeek = ({ usage }: CollectorV2Bot, collected: number): boolean => {
+  if (usage?.unit === "percent") return usage.amount7d < 1;
+  if (usage?.unit !== "share" || usage.period !== "last_7_days") return false;
+  const interval = shareInterval(usage, collected);
+  if (interval === null || interval.end < addDays(interval.start, 6) || interval.end > addDays(interval.start, 8)) return false;
+  const overlapStart = Math.max(interval.start, addDays(collected, -7));
+  const overlapEnd = Math.min(interval.end, collected);
+  if (addDays(overlapStart, 6) > overlapEnd) return false;
+  return "share" in usage ? usage.share < 0.01 : usage.shareBelow <= 0.01;
+};
+
+const subjectsOf = (rule: RuleDefinition, snapshot: CollectorInput): { readonly subjects: readonly string[]; readonly kind: SourceKind } | null => {
   const when = rule.when;
   const collected = referenceMs(snapshot);
   if (when.kind === "routine-state") {
     const subjects = snapshot.routines.filter((routine) => routine.state === when.state).map((routine) => routine.id);
-    return { subjects, evidenceKeys: subjects };
+    return { subjects, kind: "routine" };
   }
   if (when.kind === "routine-paused-for") {
     const subjects = snapshot.routines.filter((routine) => pausedLongerThan(routine, collected, when.olderThanDays)).map((routine) => routine.id);
-    return { subjects, evidenceKeys: subjects };
+    return { subjects, kind: "routine" };
   }
   if (when.kind === "routine-paused-since-unknown") {
     const subjects = snapshot.routines.filter((routine) => pausedSinceUnknown(routine, collected, when.unlessCreatedOrRunWithinDays)).map((routine) => routine.id);
-    return { subjects, evidenceKeys: subjects };
+    return { subjects, kind: "routine" };
   }
   if (when.kind === "connector-status") {
     const subjects = snapshot.connectors.filter((connector) => connector.status === when.status).map((connector) => connector.name);
-    return { subjects, evidenceKeys: subjects };
+    return { subjects, kind: "connector" };
   }
   if (when.kind === "bot-unused") {
-    const subjects = snapshot.bots.filter((bot) => botUnused(bot, collected, when.olderThanDays)).map((bot) => bot.id);
-    return { subjects, evidenceKeys: subjects };
+    const cutoff = addDays(collected, -when.olderThanDays);
+    const activeOwners = new Set<string>();
+    for (const routine of snapshot.routines) {
+      const lastRun = observedInstant(routine.lastRunAt);
+      if ((routine.runs7d ?? 0) > 0 || (lastRun.known && lastRun.at !== "never" && lastRun.at >= cutoff && lastRun.at <= collected)) {
+        activeOwners.add(routine.botId);
+      }
+    }
+    const subjects = snapshot.bots.filter((bot) => !activeOwners.has(bot.id) && botUnused(bot, collected, when.olderThanDays)).map((bot) => bot.id);
+    return { subjects, kind: "bot" };
+  }
+  if (when.kind === "bots-barely-used") {
+    const subjects = snapshot.bots.filter((bot) => belowOnePercentLastWeek(bot, collected)).map((bot) => bot.id);
+    return subjects.length >= when.minimumBots ? { subjects, kind: "bot" } : null;
   }
   if (when.kind === "stale-tasks") {
     const stale = snapshot.tasks.stale7d;
-    return stale !== null && stale > when.moreThan ? { subjects: ["tasks"], evidenceKeys: ["tasks"] } : { subjects: [], evidenceKeys: [] };
+    return stale !== null && stale > when.moreThan ? { subjects: ["tasks"], kind: "tasks" } : null;
   }
   const groups = new Map<string, string[]>();
   for (const routine of snapshot.routines) {
-    const key = `${routine.botId}\t${routine.schedule}`;
+    const key = JSON.stringify([routine.botId, routine.schedule]);
     const list = groups.get(key) ?? [];
     list.push(routine.id);
     groups.set(key, list);
   }
   const subjects = [...groups.values()].filter((ids) => ids.length > 1).flat();
-  return { subjects, evidenceKeys: subjects };
+  return { subjects, kind: "routine" };
 };
 
 export const evaluateRules = (snapshot: CollectorInput, rules: readonly RuleDefinition[]): readonly RuleHit[] => {
+  const evidence = evidenceSubjects(snapshot);
   const hits: RuleHit[] = [];
   for (const rule of rules) {
     const matched = subjectsOf(rule, snapshot);
     if (matched === null) continue;
-    const next = hit(rule, snapshot, matched.subjects, matched.evidenceKeys);
+    const next = hit(rule, snapshot, matched.subjects, evidenceFor(evidence, matched.kind, matched.subjects));
     if (next !== null) hits.push(next);
   }
   return hits;

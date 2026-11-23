@@ -2,7 +2,7 @@ import { isRecord } from "@ambitious/kit/domain/json";
 import { normalizeCollector } from "./canonical.ts";
 import { COMMAND_INPUT_SCHEMAS, type InputCommand } from "./command-inputs.ts";
 import { inputFailure, type FieldProblem } from "./field-problems.ts";
-import { validatorOf } from "./schema.ts";
+import { collectorProblems, validatorOf } from "./schema.ts";
 import { selectAnnouncements } from "./report.ts";
 import type { Announcement, BaselineSetInput, CollectorInput, DiffInput, FeedbackBuildInput, FindingsInput, RecommendInput, ReportBuildInput, ReportMarkInput } from "./types.ts";
 
@@ -29,9 +29,12 @@ const parserOf = <Command extends InputCommand>(command: Command): ((raw: unknow
   };
 };
 
-const collectorDocument = parserOf("snapshot");
-
-export const parseCollector = (raw: unknown): CollectorInput => normalizeCollector(collectorDocument(raw), schemaCommand("snapshot"));
+export const parseCollector = (raw: unknown): CollectorInput => {
+  const problems = collectorProblems(raw);
+  const accepted = (_value: unknown): _value is CollectorInput => problems.length === 0;
+  if (!accepted(raw)) throw inputFailure(schemaCommand("snapshot"), problems);
+  return normalizeCollector(raw, schemaCommand("snapshot"));
+};
 
 export const parseBaselineSet = parserOf("baseline set");
 export const parseDiff = parserOf("diff");

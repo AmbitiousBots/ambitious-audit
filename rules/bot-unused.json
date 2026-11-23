@@ -13,6 +13,65 @@
   "when": { "kind": "bot-unused", "olderThanDays": 14 },
   "fixtures": [
     {
+      "name": "the bot's routine recorded six successful runs this week",
+      "expect": "miss",
+      "bots": [
+        { "id": "bot-1", "name": "Work queue", "lastActiveAt": "2026-10-01T00:00:00Z", "routineCount": 1, "usage": null }
+      ],
+      "routines": [
+        { "id": "routine-1", "botId": "bot-1", "schedule": "daily", "state": "active", "lastRunAt": null, "runs7d": 6, "failedRuns7d": 0, "usage": null }
+      ]
+    },
+    {
+      "name": "the bot has a zero monthly share and its routine ran exactly fourteen days ago",
+      "expect": "miss",
+      "bots": [
+        { "id": "bot-1", "name": "Work queue", "lastActiveAt": null, "routineCount": 1, "usage": { "unit": "share", "period": "last_30_days", "share": 0 } }
+      ],
+      "routines": [
+        { "id": "routine-1", "botId": "bot-1", "schedule": "daily", "state": "paused", "lastRunAt": "2026-11-01T00:00:00Z", "runs7d": 0, "usage": null }
+      ]
+    },
+    {
+      "name": "both routine timestamps fall outside the inactivity window",
+      "expect": "hit",
+      "bots": [
+        { "id": "bot-1", "name": "Work queue", "lastActiveAt": "never", "routineCount": 2, "usage": null }
+      ],
+      "routines": [
+        { "id": "routine-1", "botId": "bot-1", "schedule": "daily", "state": "active", "lastRunAt": "2026-10-31T23:59:59Z", "usage": null },
+        { "id": "routine-2", "botId": "bot-1", "schedule": "weekly", "state": "active", "lastRunAt": "2026-11-15T00:00:01Z", "usage": null }
+      ]
+    },
+    {
+      "name": "the September zero-share interval ended before the November snapshot",
+      "expect": "miss",
+      "bots": [
+        { "id": "bot-1", "name": "Work queue", "lastActiveAt": null, "routineCount": null, "usage": { "unit": "share", "period": "last_30_days", "periodStart": "2026-09-01T00:00:00Z", "periodEnd": "2026-10-01T00:00:00Z", "share": 0 } }
+      ]
+    },
+    {
+      "name": "the zero-share interval ended one second before the snapshot",
+      "expect": "miss",
+      "bots": [
+        { "id": "bot-1", "name": "Work queue", "lastActiveAt": null, "routineCount": null, "usage": { "unit": "share", "period": "last_30_days", "periodEnd": "2026-11-14T23:59:59Z", "share": 0 } }
+      ]
+    },
+    {
+      "name": "the zero-share interval covers more than fourteen days through the snapshot",
+      "expect": "hit",
+      "bots": [
+        { "id": "bot-1", "name": "Work queue", "lastActiveAt": null, "routineCount": null, "usage": { "unit": "share", "period": "last_30_days", "periodStart": "2026-10-16T00:00:00Z", "share": 0 } }
+      ]
+    },
+    {
+      "name": "the zero-share interval began exactly fourteen days before the snapshot",
+      "expect": "miss",
+      "bots": [
+        { "id": "bot-1", "name": "Work queue", "lastActiveAt": null, "routineCount": null, "usage": { "unit": "share", "period": "last_30_days", "periodStart": "2026-11-01T00:00:00Z", "periodEnd": "2026-11-15T00:00:00Z", "share": 0 } }
+      ]
+    },
+    {
       "name": "a bot that has never been active",
       "expect": "hit",
       "bots": [

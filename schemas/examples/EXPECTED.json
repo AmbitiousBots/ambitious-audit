@@ -386,5 +386,53 @@
   "send_report.v3/invalid/announcement-title-is-a-number.json": {
     "keyword": "type",
     "at": "/announcements/0/title"
+  },
+  "collector.v2/invalid/both-share-fields.json": {
+    "keyword": "oneOf",
+    "at": "/bots/0/usage"
+  },
+  "collector.v2/invalid/missing-share-value.json": {
+    "keyword": "oneOf",
+    "at": "/bots/0/usage"
+  },
+  "collector.v2/invalid/empty-share-bound.json": {
+    "keyword": "exclusiveMinimum",
+    "at": "/bots/0/usage/shareBelow"
+  },
+  "collector.v2/invalid/fraction-of-a-cent.json": {
+    "keyword": "type",
+    "at": "/planUsage/extraCreditsLeftUsdCents"
+  },
+  "collector.v2/invalid/percent-above-limit.json": {
+    "keyword": "maximum",
+    "at": "/planUsage/weeklyLimitUsedPercent"
+  },
+  "send_report.v4/invalid/exact-and-bounded-share.json": {
+    "keyword": "oneOf",
+    "at": "/bots/0"
+  },
+  "send_report.v4/invalid/bound-without-period.json": {
+    "keyword": "oneOf",
+    "at": "/bots/0"
+  },
+  "send_report.v4/invalid/name-too-long.json": {
+    "keyword": "maxLength",
+    "at": "/bots/0/name"
+  },
+  "send_report.v4/invalid/missing-run-count.json": {
+    "keyword": "required",
+    "at": "/counts/routines"
+  },
+  "send_report.v4/invalid/unexpected-connector-field.json": {
+    "keyword": "additionalProperties",
+    "at": "/connectors/0"
+  },
+  "collector.v2/invalid/unknown-visibility-scope.json": {
+    "keyword": "enum",
+    "at": "/visibility/0/scope"
+  },
+  "collector.v2/invalid/unknown-evidence-source-kind.json": {
+    "keyword": "enum",
+    "at": "/evidence/0/sourceKind"
   }
 }

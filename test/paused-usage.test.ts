@@ -232,3 +232,30 @@ test("every collector document written for 0.2.0 or 0.2.1 is still accepted and 
     assert.deepEqual(JSON.parse(JSON.stringify(parseCollector(document))), sortedCopy(document), parts.join("/"));
   }
 });
+
+test("weekly exact shares and bounds need six days of overlap with the snapshot week", () => {
+  const matches = (dates: { periodStart?: string; periodEnd?: string }) => {
+    const document = shares();
+    const bots = listOf(document.bots).map((bot, index) => ({
+      ...bot, usage: { unit: "share", period: "last_7_days", ...dates, ...(index ? { share: 0.009 } : { shareBelow: 0.01 }) },
+    }));
+    const snapshot = parseCollector({ ...document, schemaVersion: 2, bots });
+    return evaluateRules(snapshot, RULES).some((hit) => hit.rule.id === "bots-barely-used");
+  };
+  assert.equal(matches({ periodStart: "2026-10-01T00:00:00Z", periodEnd: "2026-10-08T00:00:00Z" }), false);
+  assert.equal(matches({ periodStart: "2026-10-01T00:00:00Z" }), false);
+  assert.equal(matches({ periodEnd: "2026-11-08T00:00:00Z" }), false);
+  assert.equal(matches({ periodStart: "2026-11-16T00:00:00Z" }), false);
+  assert.equal(matches({ periodEnd: "2026-11-08T00:00:01Z" }), false);
+  assert.equal(matches({ periodStart: "2026-11-09T00:00:01Z" }), false);
+  assert.equal(matches({ periodStart: "2026-11-09T00:00:00Z" }), true);
+  assert.equal(matches({ periodEnd: "2026-11-14T00:00:00Z" }), true);
+  for (const [start, end, qualifies] of [
+    ["2026-09-01T00:00:00Z", "2026-11-14T00:00:00Z", false],
+    ["2026-11-06T23:59:59Z", "2026-11-15T00:00:00Z", false],
+    ["2026-11-07T00:00:00Z", "2026-11-15T00:00:00Z", true],
+    ["2026-11-09T00:00:00Z", "2026-11-15T00:00:00Z", true],
+    ["2026-11-09T00:00:01Z", "2026-11-15T00:00:00Z", false],
+  ] as const) assert.equal(matches({ periodStart: start, periodEnd: end }), qualifies);
+  assert.equal(matches({}), true);
+});

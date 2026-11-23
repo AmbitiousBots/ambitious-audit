@@ -1,0 +1,170 @@
+{
+  "id": "bots-barely-used",
+  "severity": "low",
+  "effort": "small",
+  "rank": 70,
+  "dependsOnRole": true,
+  "title": "Review bots with a small share of usage",
+  "why": "Check whether the measured usage is expected for each bot's work.",
+  "summary": {
+    "one": "One bot accounted for under 1% of usage during its measured period.",
+    "many": "{count} bots each accounted for under 1% of usage during their respective measured periods."
+  },
+  "when": {
+    "kind": "bots-barely-used",
+    "minimumBots": 3
+  },
+  "fixtures": [
+    {
+      "name": "three measured shares below one percent",
+      "expect": "hit",
+      "bots": [
+        {
+          "id": "bot-1",
+          "name": "Work queue 1",
+          "lastActiveAt": null,
+          "routineCount": null,
+          "usage": {
+            "unit": "share",
+            "period": "last_7_days",
+            "shareBelow": 0.01
+          }
+        },
+        {
+          "id": "bot-2",
+          "name": "Work queue 2",
+          "lastActiveAt": null,
+          "routineCount": null,
+          "usage": {
+            "unit": "share",
+            "period": "last_7_days",
+            "share": 0.009
+          }
+        },
+        {
+          "id": "bot-3",
+          "name": "Work queue 3",
+          "lastActiveAt": null,
+          "routineCount": null,
+          "usage": {
+            "unit": "percent",
+            "amount7d": 0.8
+          }
+        }
+      ]
+    },
+    {
+      "name": "two small shares and one at the threshold",
+      "expect": "miss",
+      "bots": [
+        {
+          "id": "bot-1",
+          "name": "Work queue 1",
+          "lastActiveAt": null,
+          "routineCount": null,
+          "usage": {
+            "unit": "share",
+            "period": "last_7_days",
+            "share": 0.001
+          }
+        },
+        {
+          "id": "bot-2",
+          "name": "Work queue 2",
+          "lastActiveAt": null,
+          "routineCount": null,
+          "usage": {
+            "unit": "share",
+            "period": "last_7_days",
+            "shareBelow": 0.01
+          }
+        },
+        {
+          "id": "bot-3",
+          "name": "Work queue 3",
+          "lastActiveAt": null,
+          "routineCount": null,
+          "usage": {
+            "unit": "share",
+            "period": "last_7_days",
+            "share": 0.01
+          }
+        }
+      ]
+    },
+    {
+      "name": "a wider bound and missing readings",
+      "expect": "miss",
+      "bots": [
+        {
+          "id": "bot-1",
+          "name": "Work queue 1",
+          "lastActiveAt": null,
+          "routineCount": null,
+          "usage": {
+            "unit": "share",
+            "period": "last_7_days",
+            "share": 0.002
+          }
+        },
+        {
+          "id": "bot-2",
+          "name": "Work queue 2",
+          "lastActiveAt": null,
+          "routineCount": null,
+          "usage": {
+            "unit": "share",
+            "period": "last_7_days",
+            "shareBelow": 0.02
+          }
+        },
+        {
+          "id": "bot-3",
+          "name": "Work queue 3",
+          "lastActiveAt": null,
+          "routineCount": null,
+          "usage": null
+        }
+      ]
+    },
+    {
+      "name": "three upper bounds for a different period",
+      "expect": "miss",
+      "bots": [
+        {
+          "id": "bot-1",
+          "name": "Work queue 1",
+          "lastActiveAt": null,
+          "routineCount": null,
+          "usage": {
+            "unit": "share",
+            "period": "last_30_days",
+            "shareBelow": 0.01
+          }
+        },
+        {
+          "id": "bot-2",
+          "name": "Work queue 2",
+          "lastActiveAt": null,
+          "routineCount": null,
+          "usage": {
+            "unit": "share",
+            "period": "last_30_days",
+            "shareBelow": 0.01
+          }
+        },
+        {
+          "id": "bot-3",
+          "name": "Work queue 3",
+          "lastActiveAt": null,
+          "routineCount": null,
+          "usage": {
+            "unit": "share",
+            "period": "last_30_days",
+            "shareBelow": 0.01
+          }
+        }
+      ]
+    }
+  ]
+}

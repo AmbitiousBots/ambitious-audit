@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { isRecord } from "@ambitious/kit/domain/json";
 import botUnused from "../rules/bot-unused.json" with { type: "json" };
+import botsBarelyUsed from "../rules/bots-barely-used.json" with { type: "json" };
 import connectorNeedsAuth from "../rules/connector-needs-auth.json" with { type: "json" };
 import connectorNeedsGrant from "../rules/connector-needs-grant.json" with { type: "json" };
 import duplicateRoutines from "../rules/duplicate-routines.json" with { type: "json" };
@@ -16,7 +17,7 @@ import { isReportPayload } from "../src/domain/schema.ts";
 import type { CollectorInput, EvidenceId } from "../src/domain/types.ts";
 import { isEvidenceId, isFingerprint, isReportId, isRuleId } from "../src/domain/types.ts";
 
-const FILES: readonly unknown[] = [failingRoutine, connectorNeedsAuth, connectorNeedsGrant, pausedRoutine, pausedRoutineSinceUnknown, botUnused, staleTasks, duplicateRoutines];
+const FILES: readonly unknown[] = [failingRoutine, connectorNeedsAuth, connectorNeedsGrant, pausedRoutine, pausedRoutineSinceUnknown, botUnused, staleTasks, duplicateRoutines, botsBarelyUsed];
 
 type Fixture = {
   readonly name: string;
@@ -54,13 +55,13 @@ const snapshotFor = (fixture: Fixture): CollectorInput => {
   const routines = fixture.routines ?? [];
   const connectors = fixture.connectors ?? [];
   const evidence = [
-    ...routines.map((routine, index) => ({ id: `ev-${index + 1}`, kind: "excerpt" as const, text: `Routine ${routine.id}.`, source: routine.id })),
-    ...connectors.map((connector, index) => ({ id: `ev-${routines.length + index + 1}`, kind: "excerpt" as const, text: `Connector ${connector.name}.`, source: connector.name })),
-    ...bots.map((bot, index) => ({ id: `ev-${routines.length + connectors.length + index + 1}`, kind: "count" as const, text: `Bot ${bot.id}.`, source: bot.id })),
-    { id: "ev-90", kind: "count" as const, text: "Open tasks have not changed.", source: "tasks" },
+    ...routines.map((routine, index) => ({ id: `ev-${index + 1}`, kind: "excerpt" as const, text: `Routine ${routine.id}.`, sourceKind: "routine", source: routine.id })),
+    ...connectors.map((connector, index) => ({ id: `ev-${routines.length + index + 1}`, kind: "excerpt" as const, text: `Connector ${connector.name}.`, sourceKind: "connector", source: connector.name })),
+    ...bots.map((bot, index) => ({ id: `ev-${routines.length + connectors.length + index + 1}`, kind: "count" as const, text: `Bot ${bot.id}.`, sourceKind: "bot", source: bot.id })),
+    { id: "ev-90", kind: "count" as const, text: "Open tasks have not changed.", sourceKind: "tasks", source: "tasks" },
   ].filter((item) => isEvidenceId(item.id));
   return parseCollector({
-    schemaVersion: 1,
+    schemaVersion: 2,
     collectedAt: "2026-11-15T00:00:00Z",
     account: { kind: "owner", label: "Main" },
     bots,
@@ -118,15 +119,15 @@ test("recommendations stay within three and each cites evidence that exists", ()
 
 test("evidence for bot-10 is not cited for bot-1, and the same holds for routines", () => {
   const snapshot = parseCollector({
-    schemaVersion: 1,
+    schemaVersion: 2,
     collectedAt: "2026-11-15T00:00:00Z",
     account: { kind: "owner", label: "Main" },
     bots: [
-      { id: "bot-1", name: "Helper", lastActiveAt: "never", routineCount: 0, usage: null },
-      { id: "bot-10", name: "Worker", lastActiveAt: "2026-11-14T00:00:00Z", routineCount: 1, usage: { unit: "credits", amount7d: 1 } },
+      { id: "bot-1", name: "Helper", lastActiveAt: "2026-10-01T08:00:00Z", routineCount: 1, usage: null },
+      { id: "bot-10", name: "Worker", lastActiveAt: "2026-10-01T08:00:00Z", routineCount: 1, usage: null },
     ],
     routines: [
-      { id: "routine-1", botId: "bot-1", schedule: "every day at 08:00", state: "failing", lastRunAt: "2026-11-14T08:00:00Z", usage: null },
+      { id: "routine-1", botId: "bot-1", schedule: "every day at 08:00", state: "failing", lastRunAt: "2026-10-01T08:00:00Z", usage: null },
       { id: "routine-10", botId: "bot-10", schedule: "every day at 09:00", state: "active", lastRunAt: "2026-11-14T09:00:00Z", usage: null },
     ],
     connectors: [],
@@ -134,8 +135,8 @@ test("evidence for bot-10 is not cited for bot-1, and the same holds for routine
     pages: { count: 0, updated7d: 0 },
     visibility,
     evidence: [
-      { id: "ev-1", kind: "excerpt", text: "Active yesterday.", source: "bot-10" },
-      { id: "ev-2", kind: "excerpt", text: "Ran yesterday.", source: "routine-10" },
+      { id: "ev-1", kind: "excerpt", text: "Active yesterday.", sourceKind: "bot", source: "bot-10" },
+      { id: "ev-2", kind: "excerpt", text: "Ran yesterday.", sourceKind: "routine", source: "routine-10" },
     ],
   });
   const hits = evaluateRules(snapshot, [parseRule(botUnused), parseRule(failingRoutine)]);
@@ -161,7 +162,7 @@ test("stale-task evidence matches the source tasks and not the word task", () =>
     evidence: [
       { id: "ev-1", kind: "excerpt", text: "This task is unrelated.", source: "task list tool" },
       { id: "ev-2", kind: "excerpt", text: "task", source: "task" },
-      { id: "ev-3", kind: "count", text: "Open tasks have not changed.", source: "Tasks" },
+      { id: "ev-3", kind: "count", text: "Open tasks have not changed.", sourceKind: "tasks", source: "Tasks" },
     ],
   });
   const hits = evaluateRules(withExtra, [parseRule(staleTasks)]);
@@ -174,20 +175,23 @@ const branded = <T extends string>(value: string, accept: (raw: string) => raw i
 };
 
 test("cited recommendation evidence stays in the report when the evidence list is cut to 30", () => {
-  const evidence = Array.from({ length: 40 }, (_, index) => ({
+  const bots = Array.from({ length: 40 }, (_, index) => ({
+    id: `bot-${index + 1}`, name: "Queue", lastActiveAt: "never", usage: null, routineCount: 0,
+  }));
+  const evidence = bots.map((bot, index) => ({
     id: `ev-${index + 1}`,
     kind: "count" as const,
     text: `Row ${index + 1}.`,
-    source: "notes",
+    sourceKind: "bot", source: bot.id,
   }));
-  const snapshot = snapshotFor({ name: "many", expect: "hit" });
+  const snapshot = snapshotFor({ name: "many", expect: "hit", bots });
   const full = parseCollector({ ...snapshot, evidence });
   const ids = (from: number, count: number): EvidenceId[] =>
     Array.from({ length: count }, (_, index) => branded(`ev-${from + index}`, isEvidenceId, "evidence id"));
   const base = parseRule(botUnused);
   const ruleHit = (id: string, rank: number, evidenceIds: EvidenceId[]): RuleHit => ({
     rule: { ...base, id: branded(id, isRuleId, "rule id"), rank },
-    subjects: ["bot-1"],
+    subjects: evidenceIds.map((id) => id.replace("ev-", "bot-")),
     withheld: false,
     evidenceIds,
     summary: "One bot has not been used.",
@@ -200,13 +204,13 @@ test("cited recommendation evidence stays in the report when the evidence list i
     ruleHit("bot-unused-late", 4, ids(21, 10)),
   ];
   const reportId = branded("018f0000-0000-7000-8000-000000000099", isReportId, "report id");
-  const { payload } = assembleReport(full, hits, new Set(), reportId, "0.3.0");
+  const { payload } = assembleReport(full, hits, new Set(), reportId, "0.4.0");
   const kept = new Set(payload.evidence.map((item) => item.id));
   assert.equal(payload.evidence.length, 30);
   for (const recommendation of payload.recommendations) {
     for (const id of recommendation.evidenceIds) assert.equal(kept.has(id), true, id);
   }
-  assert.equal(payload.evidence[0]?.id, "ev-31");
+  assert.deepEqual([...kept], Array.from({ length: 30 }, (_, i) => `ev-${i + 1}`));
 });
 
 test("when the role is unknown, at most three recommendations are returned and the ones that depend on the role are left out", () => {
@@ -225,7 +229,7 @@ test("when the role is unknown, at most three recommendations are returned and t
   const recommended = recommendationsFrom(hits, new Set()).map((item) => String(item.recommendation.id));
   assert.deepEqual(recommended, ["connector-sign-in-a", "connector-sign-in-b", "connector-sign-in-c"]);
   const reportId = branded("018f0000-0000-7000-8000-000000000098", isReportId, "report id");
-  const { payload } = assembleReport(snapshot, hits, new Set(), reportId, "0.3.0");
+  const { payload } = assembleReport(snapshot, hits, new Set(), reportId, "0.4.0");
   assert.equal(payload.recommendations.length, 3);
   assert.equal(payload.recommendations.every((item) => item.evidenceIds.length === 2), true);
   assert.deepEqual(payload.findings.filter((finding) => finding.withheld === "roleUnknown").map((finding) => String(finding.ruleId)), ["connector-sign-in-role-bound"]);
@@ -253,6 +257,7 @@ test("every rule maps high severity to high priority and medium or low severity 
     "paused-routine": "low",
     "paused-routine-since-unknown": "low",
     "bot-unused": "low",
+    "bots-barely-used": "low",
     "stale-tasks": "low",
     "duplicate-routines": "low",
   };
@@ -262,8 +267,8 @@ test("every rule maps high severity to high priority and medium or low severity 
     const fixture = fixturesOf(file).find((item) => item.expect === "hit");
     assert.ok(fixture !== undefined, rule.id);
     const snapshot = snapshotFor(fixture);
-    const { payload } = assembleReport(snapshot, evaluateRules(snapshot, [rule]), new Set(), reportId, "0.3.0");
-    assert.equal(payload.schemaVersion, 3);
+    const { payload } = assembleReport(snapshot, evaluateRules(snapshot, [rule]), new Set(), reportId, "0.4.0");
+    assert.equal(payload.schemaVersion, 4);
     assert.deepEqual(payload.announcements, []);
     const finding = payload.findings.find((item) => item.ruleId === rule.id);
     assert.ok(finding !== undefined, rule.id);
@@ -279,7 +284,7 @@ test("every rule maps high severity to high priority and medium or low severity 
 test("the report reader rejects announcement ids repeated with different titles or priorities", () => {
   const snapshot = snapshotFor({ name: "empty", expect: "miss" });
   const reportId = branded("018f0000-0000-7000-8000-000000000096", isReportId, "report id");
-  const { payload } = assembleReport(snapshot, [], new Set(), reportId, "0.3.0");
+  const { payload } = assembleReport(snapshot, [], new Set(), reportId, "0.4.0");
   const announcements = [{ id: "release", priority: "low", title: "Service title" }];
   assert.equal(isReportPayload({ ...payload, announcements }), true);
   assert.equal(isReportPayload({ ...payload, announcements: [...announcements, { id: "release", priority: "high", title: "A different service title" }] }), false);

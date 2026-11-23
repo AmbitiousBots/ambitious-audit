@@ -1,15 +1,15 @@
-import { Ajv2020 } from "ajv/dist/2020.js";
+import { wholeCents, wireValidator } from "./wire-validator.ts";
 import { isRecord } from "@ambitious/kit/domain/json";
-import collectorSchema from "../../schemas/collector.v1.json" with { type: "json" };
+import collectorV1Schema from "../../schemas/collector.v1.json" with { type: "json" };
+import collectorSchema from "../../schemas/collector.v2.json" with { type: "json" };
 import feedbackSchema from "../../schemas/send_feedback.v1.json" with { type: "json" };
 import reportV1Schema from "../../schemas/send_report.v1.json" with { type: "json" };
 import reportV2Schema from "../../schemas/send_report.v2.json" with { type: "json" };
-import reportSchema from "../../schemas/send_report.v3.json" with { type: "json" };
+import reportV3Schema from "../../schemas/send_report.v3.json" with { type: "json" };
+import reportSchema from "../../schemas/send_report.v4.json" with { type: "json" };
 import { pointerOf, type FieldProblem } from "./field-problems.ts";
 import type { CollectorInput, SendFeedbackPayload, SendReportPayload } from "./types.ts";
-import type { SendReportV1, SendReportV2 } from "./wire.generated.ts";
-
-const ajv = new Ajv2020({ allErrors: true, strict: true, verbose: true });
+import type { SendReportV1, SendReportV2, SendReportV3 } from "./wire.generated.ts";
 
 type SchemaError = {
   readonly instancePath: string;
@@ -57,7 +57,7 @@ export type Validator = { readonly problems: (raw: unknown) => readonly FieldPro
 
 export const validatorOf = (schema: unknown, name: string): Validator => {
   if (!isRecord(schema)) throw new Error(`The ${name} schema is not a JSON object.`);
-  const validate: Validate = ajv.compile(schema);
+  const validate: Validate = wireValidator.compile(schema);
   return {
     problems: (raw) => {
       if (validate(raw)) return [];
@@ -76,23 +76,35 @@ export const validatorOf = (schema: unknown, name: string): Validator => {
   };
 };
 
+const collectorV1 = validatorOf(collectorV1Schema, "collector version 1");
 const collector = validatorOf(collectorSchema, "collector");
 const report = validatorOf(reportSchema, "send_report");
 const reportV1 = validatorOf(reportV1Schema, "send_report version 1");
 const reportV2 = validatorOf(reportV2Schema, "send_report version 2");
+const reportV3 = validatorOf(reportV3Schema, "send_report version 3");
 const feedback = validatorOf(feedbackSchema, "send_feedback");
 
-export const collectorProblems = (raw: unknown): readonly FieldProblem[] => collector.problems(raw);
+export const collectorProblems = (raw: unknown): readonly FieldProblem[] =>
+  (isRecord(raw) && raw.schemaVersion === 1 ? collectorV1 : collector).problems(raw);
 
-export const isCollectorDocument = (raw: unknown): raw is CollectorInput => collector.problems(raw).length === 0;
+export const isCollectorDocument = (raw: unknown): raw is CollectorInput => collectorProblems(raw).length === 0;
 
 export const isReportPayload = (raw: unknown): raw is SendReportPayload => {
   const matches = (value: unknown): value is SendReportPayload => report.problems(value).length === 0;
-  return matches(raw) && new Set(raw.announcements.map((item) => item.id)).size === raw.announcements.length;
+  if (!matches(raw)) return false;
+  const { runs7d, failedRuns7d } = raw.counts.routines;
+  if (runs7d !== null && failedRuns7d !== null && failedRuns7d > runs7d) return false;
+  const balance = raw.planUsage?.extraCreditsLeftUsd;
+  return (balance == null || wholeCents(balance)) && new Set(raw.announcements.map((item) => item.id)).size === raw.announcements.length;
 };
 
 export const isReportV1Payload = (raw: unknown): raw is SendReportV1 => reportV1.problems(raw).length === 0;
 
 export const isReportV2Payload = (raw: unknown): raw is SendReportV2 => reportV2.problems(raw).length === 0;
+
+export const isReportV3Payload = (raw: unknown): raw is SendReportV3 => {
+  const matches = (value: unknown): value is SendReportV3 => reportV3.problems(value).length === 0;
+  return matches(raw) && new Set(raw.announcements.map((item) => item.id)).size === raw.announcements.length;
+};
 
 export const isFeedbackPayload = (raw: unknown): raw is SendFeedbackPayload => feedback.problems(raw).length === 0;
